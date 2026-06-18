@@ -15,6 +15,21 @@ export const Mark = (props: { class?: string }) => {
   )
 }
 
+export const GehennaMark = (props: { class?: string }) => {
+  return (
+    <svg
+      data-component="logo-gehenna-mark"
+      classList={{ [props.class ?? ""]: !!props.class }}
+      viewBox="0 0 16 20"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M0 0H4V4H8V8H12V12H8V16H4V20H0Z" fill="var(--icon-strong-base)" />
+      <path d="M8 8H12V12H8V8Z" fill="var(--icon-weak-base)" />
+    </svg>
+  )
+}
+
 export const Splash = (props: Pick<ComponentProps<"svg">, "ref" | "class">) => {
   return (
     <svg
