@@ -1,3 +1,4 @@
+import path from "path"
 import {
   LLM,
   LLMClient,
@@ -12,10 +13,12 @@ import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
+import { Path as GlobalPath } from "../../global"
 import { Location } from "../../location"
 import { ModelV2 } from "../../model"
 import { ProviderV2 } from "../../provider"
 import { QuestionV2 } from "../../question"
+import { SubscriptionUsage } from "../../subscription-usage"
 import { SystemContext } from "../../system-context/index"
 import { SystemContextRegistry } from "../../system-context/registry"
 import { SkillGuidance } from "../../skill/guidance"
@@ -100,9 +103,15 @@ export const layer = Layer.effect(
     const systemContext = yield* SystemContextRegistry.Service
     const skillGuidance = yield* SkillGuidance.Service
     const referenceGuidance = yield* ReferenceGuidance.Service
+    const subscriptionUsage = yield* SubscriptionUsage.Service
     const config = yield* Config.Service
     const db = (yield* Database.Service).db
-    const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
+    const compaction = SessionCompaction.make({
+      events,
+      llm,
+      config: yield* config.entries(),
+      collapseDir: path.join(GlobalPath.log, "collapse"),
+    })
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -211,22 +220,55 @@ export const layer = Layer.effect(
       const current = yield* getSession(sessionID)
       if ((yield* agents.select(current.agent)).id !== agent.id || !sameModel(current.model, session.model))
         return yield* Effect.die(rebuildPreparedTurn())
+      const modelInfo = yield* models.select(session)
       const model = yield* models.resolve(session)
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
       const toolMaterialization = yield* tools.materialize(agent.info?.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
+      const configEntries = yield* config.entries()
+      const experimental = Config.latest(configEntries, "experimental")
+      const safeContext = experimental?.tool_result_budget
+        ? SessionCompaction.applyToolResultBudget(context, experimental.tool_result_budget)
+        : context
       const request = LLM.request({
         model,
         providerOptions: { openai: { promptCacheKey } },
         system: [agent.info?.system, system.baseline]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
-        messages: toLLMMessages(context, model),
+        messages: toLLMMessages(safeContext, model),
         tools: toolMaterialization.definitions,
       })
-      if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
-        return yield* Effect.die(rebuildPreparedTurn())
+      const contextWindow = model.route.defaults.limits?.context ?? 0
+      const utilization = SessionCompaction.computeUtilization(request, contextWindow)
+      const cheapModel =
+        experimental?.microcompact || experimental?.context_collapse
+          ? yield* models.resolveCheap(session)
+          : undefined
+      const compacted =
+        experimental?.microcompact && utilization >= 0.75
+          ? yield* compaction.microCompactIfNeeded({ sessionID: session.id, entries, model, request, cheapModel })
+          : yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request })
+      if (compacted) return yield* Effect.die(rebuildPreparedTurn())
+      if (experimental?.context_collapse && utilization >= 0.97) {
+        if (yield* compaction.collapseIfNeeded({ sessionID: session.id, entries, model, request, cheapModel }))
+          return yield* Effect.die(rebuildPreparedTurn())
+      }
+      const accountID = SubscriptionUsage.requestAccountID({
+        body: request.model.route.defaults.http?.body,
+        headers: request.model.route.defaults.headers,
+      })
+      const captureUsage = (providerMetadata: { readonly [key: string]: Record<string, unknown> } | undefined) => {
+        if (accountID === undefined) return Effect.void
+        const usage = SubscriptionUsage.fromProviderMetadata({
+          provider: ProviderV2.ID.make(request.model.provider),
+          accountID,
+          providerMetadata,
+        })
+        if (!usage) return Effect.void
+        return subscriptionUsage.upsertLatest(usage)
+      }
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: agent.id,
@@ -235,6 +277,7 @@ export const layer = Layer.effect(
           providerID: ProviderV2.ID.make(model.provider),
           ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
         },
+        modelCost: modelInfo.cost,
       })
       const withPublication = Semaphore.makeUnsafe(1).withPermit
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
@@ -246,6 +289,7 @@ export const layer = Layer.effect(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             if (overflowFailure || publisher.hasProviderError()) return
+            if ("providerMetadata" in event) yield* captureUsage(event.providerMetadata)
             if (LLMEvent.is.providerError(event)) {
               if (isContextOverflowFailure(event) && !publisher.hasAssistantStarted()) {
                 overflowFailure = event
@@ -297,6 +341,7 @@ export const layer = Layer.effect(
             return yield* Effect.die(continueAfterOverflowCompaction)
           if (overflowFailure) yield* publish(overflowFailure)
           const llmFailure = failure instanceof LLMError ? failure : undefined
+          if (llmFailure && "providerMetadata" in llmFailure.reason) yield* captureUsage(llmFailure.reason.providerMetadata)
           if (llmFailure && !publisher.hasProviderError()) {
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
             yield* withPublication(

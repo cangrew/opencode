@@ -40,13 +40,22 @@ export type Error =
   | UnsupportedApiError
 
 export interface Interface {
+  readonly select: (session: SessionSchema.Info) => Effect.Effect<ModelV2.Info, Error>
   readonly resolve: (session: SessionSchema.Info) => Effect.Effect<Model, Error>
+  readonly resolveCheap: (session: SessionSchema.Info) => Effect.Effect<Model, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRunnerModel") {}
 
 /** Test or embedding seam for supplying a model resolver directly. */
-export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Service, Service.of({ resolve }))
+export const layerWith = (
+  resolve: Interface["resolve"],
+  select: Interface["select"] = (session) =>
+    resolve(session).pipe(
+      Effect.map((model) => ModelV2.Info.empty(ProviderV2.ID.make(model.provider), ModelV2.ID.make(model.id))),
+    ),
+  resolveCheap: Interface["resolveCheap"] = resolve,
+) => Layer.succeed(Service, Service.of({ resolve, select, resolveCheap }))
 
 const apiKey = (model: ModelV2.Info, connection?: IntegrationConnection.Info, credential?: Credential.Stored) => {
   if (credential?.value.type === "key") return Auth.value(credential.value.key)
@@ -86,17 +95,26 @@ const withVariant = (model: ModelV2.Info, variantID: ModelV2.VariantID | undefin
 const apiName = (model: ModelV2.Info) =>
   model.api.type === "aisdk" ? `${model.api.type}:${model.api.package}` : model.api.type
 
+const withCredentialMetadata = (model: ModelV2.Info, credential?: Credential.Stored) => {
+  if (credential?.value.metadata === undefined) return model
+  return produce(model, (draft) => {
+    Object.assign(draft.request.body, credential.value.metadata)
+    const accountID = credential.value.metadata?.accountID
+    if (draft.api.type !== "aisdk" || draft.api.package !== "@ai-sdk/openai") return
+    if (typeof accountID !== "string" || accountID.length === 0) return
+    draft.request.headers = {
+      ...draft.request.headers,
+      "ChatGPT-Account-Id": accountID,
+    }
+  })
+}
+
 export const fromCatalogModel = (
   model: ModelV2.Info,
   connection?: IntegrationConnection.Info,
   credential?: Credential.Stored,
 ): Effect.Effect<Model, UnsupportedApiError> => {
-  const resolved =
-    credential?.value.metadata === undefined
-      ? model
-      : produce(model, (draft) => {
-          Object.assign(draft.request.body, credential.value.metadata)
-        })
+  const resolved = withCredentialMetadata(model, credential)
   const key = apiKey(resolved, connection, credential)
   if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/openai") {
     return Effect.succeed(
@@ -145,21 +163,32 @@ export const locationLayer = Layer.effect(
     const credentials = yield* Credential.Service
     const integrations = yield* Integration.Service
     const boot = yield* PluginBoot.Service
+    const select = Effect.fn("SessionRunnerModel.select")(function* (session: SessionSchema.Info) {
+      yield* boot.wait()
+      const selected = session.model
+        ? yield* catalog.model.get(session.model.providerID, session.model.id)
+        : (Option.getOrUndefined((yield* catalog.model.default()).pipe(Option.filter(supported))) ??
+          (yield* catalog.model.available()).find(supported))
+      if (!selected) return yield* new ModelNotSelectedError({ sessionID: session.id })
+      return withVariant(selected, session.model?.variant)
+    })
+    const resolveModel = Effect.fn("SessionRunnerModel.resolveModel")(function* (info: ModelV2.Info) {
+      const connection = yield* integrations.connection.forIntegration(Integration.ID.make(info.providerID))
+      return yield* fromCatalogModel(
+        info,
+        connection,
+        connection?.type === "credential" ? yield* credentials.get(connection.id) : undefined,
+      )
+    })
     return Service.of({
+      select,
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session) {
-        // Location plugins populate and filter the catalog asynchronously during layer startup.
-        yield* boot.wait()
-        const selected = session.model
-          ? yield* catalog.model.get(session.model.providerID, session.model.id)
-          : (Option.getOrUndefined((yield* catalog.model.default()).pipe(Option.filter(supported))) ??
-            (yield* catalog.model.available()).find(supported))
-        if (!selected) return yield* new ModelNotSelectedError({ sessionID: session.id })
-        const connection = yield* integrations.connection.forIntegration(Integration.ID.make(selected.providerID))
-        return yield* fromCatalogModel(
-          withVariant(selected, session.model?.variant),
-          connection,
-          connection?.type === "credential" ? yield* credentials.get(connection.id) : undefined,
-        )
+        return yield* resolveModel(yield* select(session))
+      }),
+      resolveCheap: Effect.fn("SessionRunnerModel.resolveCheap")(function* (session) {
+        const selected = yield* select(session)
+        const small = Option.getOrUndefined(yield* catalog.model.small(selected.providerID))
+        return yield* resolveModel(small ?? selected)
       }),
     })
   }),
