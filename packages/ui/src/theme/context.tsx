@@ -57,6 +57,8 @@ const names: Record<string, string> = {
   dracula: "Dracula",
   everforest: "Everforest",
   flexoki: "Flexoki",
+  gehenna: "Gehenna",
+  "gehenna-dim": "Gehenna Dim",
   github: "GitHub",
   gruvbox: "Gruvbox",
   kanagawa: "Kanagawa",
