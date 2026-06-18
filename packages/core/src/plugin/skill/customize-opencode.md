@@ -136,7 +136,10 @@ Every field is optional.
 
   "experimental": {
     "primary_tools": ["edit"],
-    "mcp_timeout": 30000
+    "mcp_timeout": 30000,
+    "tool_result_budget": 50000,
+    "microcompact": false,
+    "context_collapse": false
   },
 
   "tool_output": { "max_lines": 200, "max_bytes": 8192 },
@@ -392,6 +395,54 @@ or globs like `~/projects/**`).
 
 Per-agent `permission:` overrides top-level `permission:`. Plan Mode lives on
 the `plan` agent's permission ruleset (`edit: deny *`).
+
+## Context safety net (opt-in)
+
+Three opt-in flags under `experimental` activate layered context management for
+long sessions. All are off by default and independent of each other.
+
+### `experimental.tool_result_budget` (number, character count)
+
+A character budget for the total size of all tool results in the projected
+history. When the total exceeds the budget, the oldest tool results are replaced
+with the literal string `[tool result truncated to save context]` until the
+total is within the budget. Happens before every request. Unset means disabled.
+
+```json
+{ "experimental": { "tool_result_budget": 50000 } }
+```
+
+### `experimental.microcompact` (boolean)
+
+When `true`, a lightweight summarization pass runs when estimated context
+utilization reaches 75%. The 10 most recent conversation turns are kept
+verbatim; everything older is collapsed into a rolling summary using a cheap
+model (falls back to the session model if no cheap variant is configured). A
+no-op below 75% or when disabled.
+
+```json
+{ "experimental": { "microcompact": true } }
+```
+
+### `experimental.context_collapse` (boolean)
+
+When `true`, a full-history summarization runs at 97% estimated utilization.
+Before any messages are removed, the complete session history is saved to
+`~/.local/share/opencode/log/collapse/<session-id>-<timestamp>.json`. On
+successful summarization the history is replaced with the summary and the last
+user message. If summarization fails the last 4 messages are kept instead.
+A no-op below 97% or when disabled.
+
+```json
+{ "experimental": { "context_collapse": true } }
+```
+
+### Reactive 413 recovery
+
+Independent of the above flags, opencode automatically compacts the history and
+retries the request when a provider rejects it with a context-overflow error
+(HTTP 413 or equivalent "prompt too long" signal). This path is always active
+and does not require any config change.
 
 ## Escape hatches
 

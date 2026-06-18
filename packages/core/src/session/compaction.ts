@@ -1,5 +1,7 @@
 export * as SessionCompaction from "./compaction"
 
+import path from "path"
+import fs from "fs/promises"
 import { LLM, LLMError, LLMEvent, Message, type LLMRequest, type Model } from "@opencode-ai/llm"
 import { DateTime, Effect, Stream } from "effect"
 import type { Config } from "../config"
@@ -13,6 +15,9 @@ const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 8_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
 const SUMMARY_OUTPUT_TOKENS = 4_096
+const MICROCOMPACT_KEEP_COUNT = 10
+const COLLAPSE_KEEP_COUNT = 4
+export const TRUNCATED_TOOL_RESULT = "[tool result truncated to save context]"
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
 ## Goal
@@ -67,6 +72,7 @@ type Dependencies = {
     readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
   }
   readonly config: readonly Config.Entry[]
+  readonly collapseDir: string
 }
 
 type Input = {
@@ -74,6 +80,7 @@ type Input = {
   readonly entries: readonly Entry[]
   readonly model: Model
   readonly request: LLMRequest
+  readonly cheapModel?: Model
 }
 
 const estimate = (value: unknown) => Token.estimate(JSON.stringify(value))
@@ -163,6 +170,62 @@ const select = (
   }
 }
 
+export const computeUtilization = (request: LLMRequest, contextWindow: number): number =>
+  contextWindow > 0
+    ? Token.estimate(JSON.stringify({ system: request.system, messages: request.messages, tools: request.tools })) /
+      contextWindow
+    : 0
+
+export const applyToolResultBudget = (
+  messages: readonly SessionMessage.Message[],
+  budget: number,
+): readonly SessionMessage.Message[] => {
+  type ToolRef = { msgIdx: number; partIdx: number; chars: number }
+  const toolRefs: ToolRef[] = []
+  for (let msgIdx = 0; msgIdx < messages.length; msgIdx++) {
+    const msg = messages[msgIdx]
+    if (msg.type !== "assistant") continue
+    for (let partIdx = 0; partIdx < msg.content.length; partIdx++) {
+      const part = msg.content[partIdx]
+      if (part.type !== "tool" || part.state.status !== "completed") continue
+      toolRefs.push({ msgIdx, partIdx, chars: serializeToolContent(part.state.content).length })
+    }
+  }
+  const total = toolRefs.reduce((sum, ref) => sum + ref.chars, 0)
+  if (total <= budget) return messages
+  const toTruncate = new Set<number>()
+  let remaining = total
+  const replacementChars = TRUNCATED_TOOL_RESULT.length
+  for (let i = 0; i < toolRefs.length; i++) {
+    if (remaining <= budget) break
+    const saved = toolRefs[i].chars - replacementChars
+    if (saved <= 0) continue
+    remaining -= saved
+    toTruncate.add(i)
+  }
+  let refIndex = 0
+  return messages.map((msg) => {
+    if (msg.type !== "assistant") return msg
+    let modified = false
+    const content = msg.content.map((part) => {
+      if (part.type !== "tool" || part.state.status !== "completed") return part
+      const i = refIndex++
+      if (!toTruncate.has(i)) return part
+      modified = true
+      return new SessionMessage.AssistantTool({
+        ...part,
+        state: new SessionMessage.ToolStateCompleted({
+          ...part.state,
+          content: [{ type: "text" as const, text: TRUNCATED_TOOL_RESULT }],
+          structured: {},
+        }),
+      })
+    })
+    if (!modified) return msg
+    return new SessionMessage.Assistant({ ...msg, content })
+  })
+}
+
 export const buildPrompt = (input: { readonly previousSummary?: string; readonly context: readonly string[] }) =>
   [
     input.previousSummary
@@ -239,8 +302,134 @@ export const make = (dependencies: Dependencies) => {
       return false
     return yield* compactAfterOverflow(input)
   })
+  const summarize = Effect.fn("SessionCompaction.summarize")(function* (
+    model: Model,
+    summaryPrompt: string,
+    outputTokens: number,
+  ) {
+    const chunks: string[] = []
+    let failed = false
+    const ok = yield* dependencies.llm
+      .stream(
+        LLM.request({
+          model,
+          messages: [Message.user(summaryPrompt)],
+          tools: [],
+          generation: { maxTokens: outputTokens },
+        }),
+      )
+      .pipe(
+        Stream.runForEach((event) => {
+          if (LLMEvent.is.providerError(event)) failed = true
+          if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+          return Effect.void
+        }),
+        Effect.as(true),
+        Effect.catchTag("LLM.Error", () => Effect.succeed(false)),
+      )
+    const text = chunks.join("")
+    return ok && !failed && text.trim() ? text : undefined
+  })
+
+  const microCompactIfNeeded = Effect.fn("SessionCompaction.microCompactIfNeeded")(function* (input: Input) {
+    const context = input.model.route.defaults.limits?.context
+    if (context === undefined || context <= 0) return false
+    const conversation = input.entries
+      .filter((entry) => entry.message.type !== "compaction")
+      .map((entry) => serialize(entry.message))
+      .filter(Boolean)
+    if (conversation.length <= MICROCOMPACT_KEEP_COUNT) return false
+    const split = conversation.length - MICROCOMPACT_KEEP_COUNT
+    const head = conversation.slice(0, split).join("\n\n")
+    const recent = conversation.slice(split).join("\n\n")
+    const previousSummary = input.entries.find((e) => e.message.type === "compaction")?.message
+    const summaryPrompt = buildPrompt({
+      previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
+      context: [previousSummary?.type === "compaction" ? previousSummary.recent : "", head].filter(Boolean),
+    })
+    const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
+    const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
+    if (Token.estimate(summaryPrompt) > context - summaryOutput) return false
+    const messageID = SessionMessage.ID.create()
+    yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
+      sessionID: input.sessionID,
+      messageID,
+      timestamp: yield* DateTime.now,
+      reason: "auto",
+    })
+    const summarizationModel = input.cheapModel ?? input.model
+    const summary = yield* summarize(summarizationModel, summaryPrompt, summaryOutput)
+    if (!summary) return false
+    yield* dependencies.events.publish(SessionEvent.Compaction.Ended, {
+      sessionID: input.sessionID,
+      messageID,
+      timestamp: yield* DateTime.now,
+      reason: "auto",
+      text: summary,
+      recent,
+    })
+    return true
+  })
+
+  const collapseIfNeeded = Effect.fn("SessionCompaction.collapseIfNeeded")(function* (input: Input) {
+    const context = input.model.route.defaults.limits?.context
+    if (context === undefined || context <= 0) return false
+    const conversation = input.entries
+      .filter((entry) => entry.message.type !== "compaction")
+      .map((entry) => serialize(entry.message))
+      .filter(Boolean)
+    if (conversation.length === 0) return false
+    const messageID = SessionMessage.ID.create()
+    const timestamp = yield* DateTime.now
+    const backupPath = path.join(dependencies.collapseDir, `${input.sessionID}-${DateTime.toEpochMillis(timestamp)}.json`)
+    const backedUp = yield* Effect.tryPromise(async () => {
+      await fs.mkdir(dependencies.collapseDir, { recursive: true })
+      await Bun.write(Bun.file(backupPath), JSON.stringify(input.entries.map((e) => e.message)))
+      return true
+    }).pipe(Effect.catch(() => Effect.succeed(false)))
+    if (!backedUp) return false
+    yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
+      sessionID: input.sessionID,
+      messageID,
+      timestamp,
+      reason: "auto",
+    })
+    const summarizationModel = input.cheapModel ?? input.model
+    const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
+    const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
+    const summaryPrompt = buildPrompt({ context: [conversation.join("\n\n")] })
+    const summary = yield* summarize(summarizationModel, summaryPrompt, summaryOutput)
+    const lastUserMessage = input.entries
+      .filter((e) => e.message.type === "user")
+      .at(-1)
+    const lastUserText = lastUserMessage?.message.type === "user" ? serialize(lastUserMessage.message) : ""
+    if (summary) {
+      yield* dependencies.events.publish(SessionEvent.Compaction.Ended, {
+        sessionID: input.sessionID,
+        messageID,
+        timestamp: yield* DateTime.now,
+        reason: "auto",
+        text: summary,
+        recent: lastUserText,
+      })
+    } else {
+      const keepLast = conversation.slice(-COLLAPSE_KEEP_COUNT).join("\n\n")
+      yield* dependencies.events.publish(SessionEvent.Compaction.Ended, {
+        sessionID: input.sessionID,
+        messageID,
+        timestamp: yield* DateTime.now,
+        reason: "auto",
+        text: "",
+        recent: keepLast,
+      })
+    }
+    return true
+  })
+
   return {
     compactIfNeeded,
     compactAfterOverflow,
+    microCompactIfNeeded,
+    collapseIfNeeded,
   }
 }
