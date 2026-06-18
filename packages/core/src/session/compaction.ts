@@ -195,9 +195,12 @@ export const applyToolResultBudget = (
   if (total <= budget) return messages
   const toTruncate = new Set<number>()
   let remaining = total
+  const replacementChars = TRUNCATED_TOOL_RESULT.length
   for (let i = 0; i < toolRefs.length; i++) {
     if (remaining <= budget) break
-    remaining = remaining - toolRefs[i].chars + TRUNCATED_TOOL_RESULT.length
+    const saved = toolRefs[i].chars - replacementChars
+    if (saved <= 0) continue
+    remaining -= saved
     toTruncate.add(i)
   }
   let refIndex = 0
@@ -379,10 +382,12 @@ export const make = (dependencies: Dependencies) => {
     const messageID = SessionMessage.ID.create()
     const timestamp = yield* DateTime.now
     const backupPath = path.join(dependencies.collapseDir, `${input.sessionID}-${DateTime.toEpochMillis(timestamp)}.json`)
-    yield* Effect.tryPromise(() => fs.mkdir(dependencies.collapseDir, { recursive: true })).pipe(Effect.ignore)
-    yield* Effect.tryPromise(() =>
-      Bun.write(Bun.file(backupPath), JSON.stringify(input.entries.map((e) => e.message))),
-    ).pipe(Effect.ignore)
+    const backedUp = yield* Effect.tryPromise(async () => {
+      await fs.mkdir(dependencies.collapseDir, { recursive: true })
+      await Bun.write(Bun.file(backupPath), JSON.stringify(input.entries.map((e) => e.message)))
+      return true
+    }).pipe(Effect.catch(() => Effect.succeed(false)))
+    if (!backedUp) return false
     yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
       sessionID: input.sessionID,
       messageID,

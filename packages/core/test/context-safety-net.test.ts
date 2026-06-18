@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import * as fs from "node:fs/promises"
+import * as path from "node:path"
 import { DateTime, Effect, Stream } from "effect"
 import { LLM, LLMEvent } from "@opencode-ai/llm"
 import type { LLMRequest } from "@opencode-ai/llm"
@@ -211,6 +213,7 @@ describe("Tier 2: microCompactIfNeeded", () => {
     )
 
     expect(result).toBe(false)
+    expect(published.find((e) => e.type === STARTED)).toBeDefined()
     expect(published.find((e) => e.type === ENDED)).toBeUndefined()
   })
 
@@ -395,5 +398,28 @@ describe("Tier 3: collapseIfNeeded", () => {
     )
 
     expect(capturedModelId).toBe("cheap-collapse-model")
+  })
+
+  test("writes backup JSON to collapseDir before collapsing", async () => {
+    const collapseDir = `/tmp/opencode-collapse-backup-test-${Date.now()}`
+    const { events, published: _published } = makeMockEvents()
+    const llm = makeMockLLM("backup summary")
+    const compaction = SessionCompaction.make({ events, llm, config: [], collapseDir })
+    const model = makeModel(100000)
+    const request = makeRequest(100000)
+    const messages = [makeUser("first"), makeUser("second")]
+
+    await Effect.runPromise(
+      compaction.collapseIfNeeded({ sessionID, entries: toEntries(messages), model, request }),
+    )
+
+    const files = await fs.readdir(collapseDir)
+    expect(files.length).toBeGreaterThan(0)
+    const backupFile = files.find((f) => f.startsWith(sessionID) && f.endsWith(".json"))
+    expect(backupFile).toBeDefined()
+    const content = JSON.parse(await fs.readFile(path.join(collapseDir, backupFile!), "utf-8"))
+    expect(Array.isArray(content)).toBe(true)
+    expect(content).toHaveLength(messages.length)
+    await fs.rm(collapseDir, { recursive: true, force: true })
   })
 })
