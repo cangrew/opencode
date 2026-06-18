@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-06-18
+review: changes-requested
+model: gpt-5.1-codex  # route: Codex OAuth (subscription, no token cost). Broad but mechanical caps/counters + hash loop detection across many call sites

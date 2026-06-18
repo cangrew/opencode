@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-06-18
+review: changes-requested
+model: claude-sonnet-4-6  # route: Claude Code (subscription, no token cost). Tiered thresholds + reactive 413 recovery + token estimation: deep, reliable editor

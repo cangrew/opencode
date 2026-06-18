@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-06-18
+review: changes-requested
+model: gpt-5.3-codex  # route: Codex OAuth (subscription, no token cost). packages/llm provider+routing plumbing; strong coding model, offloads from the Claude plan

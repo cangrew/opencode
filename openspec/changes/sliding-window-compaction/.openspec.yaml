@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-06-18
+review: changes-requested
+model: claude-sonnet-4-6  # route: Claude Code (subscription, no token cost). HEAD/TAIL boundary + tool-pair integrity + summary caching: correctness-sensitive

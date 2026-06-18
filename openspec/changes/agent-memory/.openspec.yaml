@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-06-18
+review: changes-requested
+model: claude-opus-4-8  # route: Claude Code (subscription, no token cost). Security-critical (>95% memory-poisoning injection surface) + write-validation/decay: top capability
