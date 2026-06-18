@@ -15,4 +15,8 @@ export class Policy extends Schema.Class<Policy>("ConfigV2.Experimental.Policy")
 
 export class Experimental extends Schema.Class<Experimental>("ConfigV2.Experimental")({
   policies: Policy.pipe(Schema.Array, Schema.optional),
+  swarm: Schema.Boolean.pipe(Schema.optional),
+  swarm_max_items: Schema.Number.pipe(Schema.optional),
+  swarm_concurrency: Schema.Number.pipe(Schema.optional),
+  swarm_item_timeout_ms: Schema.Number.pipe(Schema.optional),
 }) {}

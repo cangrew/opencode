@@ -1,0 +1,22 @@
+Fan-out a prompt template across multiple items in parallel, running each as an independent subagent.
+
+Use swarm for read-heavy, independent, parallel tasks (review N files, analyze N items). Each item gets its own subagent session running the expanded template. Results are aggregated into a single <swarm_results> XML envelope.
+
+When NOT to use the Swarm tool:
+- Parallel writes to shared or overlapping files are out of scope. Use git worktrees instead.
+- If items have dependencies or shared state, run them sequentially.
+- If you only have one item, use the Task tool instead.
+
+Parameters:
+- template: prompt with {{placeholder}} markers, e.g. "Review {{file}} for issues"
+- items: array of objects with an "id" field and any placeholder values, e.g. [{"id": "1", "file": "foo.ts"}]
+- agent: subagent type to use (default: "general")
+- concurrency: max parallel subagents, 1-20 (default: 5)
+- background: run asynchronously and inject result when done (default: false)
+
+Usage notes:
+1. The "id" field in each item is reserved as the item identifier; it is not used as a template placeholder.
+2. Each item runs in an isolated subagent session; items cannot communicate with each other.
+3. Swarm subagents cannot spawn nested tasks or swarms.
+4. In foreground mode, the tool blocks until all items complete and returns aggregated XML.
+5. In background mode, it returns immediately and injects <swarm_results> into the conversation when all items settle.

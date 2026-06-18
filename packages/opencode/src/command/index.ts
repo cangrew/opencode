@@ -95,6 +95,22 @@ export const layer = Layer.effect(
         hints: hints(PROMPT_REVIEW),
       }
 
+      if (cfg.experimental?.swarm) {
+        commands["swarm"] = {
+          name: "swarm",
+          description: "fan-out a prompt template across multiple items in parallel",
+          source: "command",
+          get template() {
+            return [
+              "Use the swarm tool to fan-out the following task across multiple items in parallel.",
+              "Define a template with {{placeholder}} markers and provide an items array.",
+              "$ARGUMENTS",
+            ].join("\n")
+          },
+          hints: ["$ARGUMENTS"],
+        }
+      }
+
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
         commands[name] = {
           name,
