@@ -38,7 +38,7 @@
       "diffDelete": "#E0746A"
     },
     "overrides": {
-      "background": "#000000",
+      "background-base": "#000000",
       "syntax-comment": "#8f897b",
       "syntax-keyword": "#C79BD1",
       "syntax-string": "#8FC97A",

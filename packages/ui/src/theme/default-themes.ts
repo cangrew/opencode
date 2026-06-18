@@ -12,6 +12,8 @@ import cursorThemeJson from "./themes/cursor.json"
 import draculaThemeJson from "./themes/dracula.json"
 import everforestThemeJson from "./themes/everforest.json"
 import flexokiThemeJson from "./themes/flexoki.json"
+import gehennaThemeJson from "./themes/gehenna.json"
+import gehennaDimThemeJson from "./themes/gehenna-dim.json"
 import githubThemeJson from "./themes/github.json"
 import gruvboxThemeJson from "./themes/gruvbox.json"
 import kanagawaThemeJson from "./themes/kanagawa.json"
@@ -50,6 +52,8 @@ export const cursorTheme = cursorThemeJson as DesktopTheme
 export const draculaTheme = draculaThemeJson as DesktopTheme
 export const everforestTheme = everforestThemeJson as DesktopTheme
 export const flexokiTheme = flexokiThemeJson as DesktopTheme
+export const gehennaTheme = gehennaThemeJson as DesktopTheme
+export const gehennaDimTheme = gehennaDimThemeJson as DesktopTheme
 export const githubTheme = githubThemeJson as DesktopTheme
 export const gruvboxTheme = gruvboxThemeJson as DesktopTheme
 export const kanagawaTheme = kanagawaThemeJson as DesktopTheme
@@ -89,6 +93,8 @@ export const DEFAULT_THEMES: Record<string, DesktopTheme> = {
   dracula: draculaTheme,
   everforest: everforestTheme,
   flexoki: flexokiTheme,
+  gehenna: gehennaTheme,
+  "gehenna-dim": gehennaDimTheme,
   github: githubTheme,
   gruvbox: gruvboxTheme,
   kanagawa: kanagawaTheme,
