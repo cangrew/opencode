@@ -1,0 +1,49 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Gehenna Dim",
+  "id": "gehenna-dim",
+  "light": {
+    "palette": {
+      "neutral": "#f5f1e6",
+      "ink": "#2b2a24",
+      "primary": "#2f7aa6",
+      "accent": "#8a4f97",
+      "success": "#4f8a3a",
+      "warning": "#9c7320",
+      "error": "#c2483b",
+      "info": "#2f8b84",
+      "diffAdd": "#5f9a47",
+      "diffDelete": "#c2483b"
+    },
+    "overrides": {
+      "syntax-comment": "#978f79",
+      "syntax-keyword": "#8a4f97",
+      "syntax-string": "#4f8a3a",
+      "syntax-primitive": "#9c7320",
+      "syntax-property": "#2f8b84",
+      "syntax-constant": "#2f7aa6"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#0c0b0a",
+      "ink": "#E0D8C4",
+      "primary": "#8CCAE6",
+      "accent": "#C79BD1",
+      "success": "#8FC97A",
+      "warning": "#D9B36A",
+      "error": "#E0746A",
+      "info": "#73C7C0",
+      "diffAdd": "#8FC97A",
+      "diffDelete": "#E0746A"
+    },
+    "overrides": {
+      "syntax-comment": "#8f897b",
+      "syntax-keyword": "#C79BD1",
+      "syntax-string": "#8FC97A",
+      "syntax-primitive": "#D9B36A",
+      "syntax-property": "#73C7C0",
+      "syntax-constant": "#8CCAE6"
+    }
+  }
+}

@@ -68,6 +68,94 @@ test("terminalMode does not derive mode from ANSI slot zero", () => {
   expect(terminalMode(terminalColors(null, ["#000000"]))).toBeUndefined()
 })
 
+const REQUIRED_THEME_TOKENS: Array<keyof import("../src/theme").Theme> = [
+  "primary",
+  "secondary",
+  "accent",
+  "error",
+  "warning",
+  "success",
+  "info",
+  "text",
+  "textMuted",
+  "selectedListItemText",
+  "background",
+  "backgroundPanel",
+  "backgroundElement",
+  "backgroundMenu",
+  "border",
+  "borderActive",
+  "borderSubtle",
+  "diffAdded",
+  "diffRemoved",
+  "diffContext",
+  "diffHunkHeader",
+  "diffHighlightAdded",
+  "diffHighlightRemoved",
+  "diffAddedBg",
+  "diffRemovedBg",
+  "diffContextBg",
+  "diffLineNumber",
+  "diffAddedLineNumberBg",
+  "diffRemovedLineNumberBg",
+  "markdownText",
+  "markdownHeading",
+  "markdownLink",
+  "markdownLinkText",
+  "markdownCode",
+  "markdownBlockQuote",
+  "markdownEmph",
+  "markdownStrong",
+  "markdownHorizontalRule",
+  "markdownListItem",
+  "markdownListEnumeration",
+  "markdownImage",
+  "markdownImageText",
+  "markdownCodeBlock",
+  "syntaxComment",
+  "syntaxKeyword",
+  "syntaxFunction",
+  "syntaxVariable",
+  "syntaxString",
+  "syntaxNumber",
+  "syntaxType",
+  "syntaxOperator",
+  "syntaxPunctuation",
+]
+
+test("gehenna theme registers and resolves all required tokens for dark and light", () => {
+  const theme = DEFAULT_THEMES["gehenna"]
+  expect(theme).toBeDefined()
+
+  for (const mode of ["dark", "light"] as const) {
+    const resolved = resolveTheme(theme!, mode)
+    for (const token of REQUIRED_THEME_TOKENS) {
+      expect(resolved[token], `gehenna ${mode} missing token: ${token}`).toBeDefined()
+    }
+    expect(typeof resolved.thinkingOpacity).toBe("number")
+  }
+})
+
+test("gehenna-dim theme registers and resolves all required tokens for dark and light", () => {
+  const theme = DEFAULT_THEMES["gehenna-dim"]
+  expect(theme).toBeDefined()
+
+  for (const mode of ["dark", "light"] as const) {
+    const resolved = resolveTheme(theme!, mode)
+    for (const token of REQUIRED_THEME_TOKENS) {
+      expect(resolved[token], `gehenna-dim ${mode} missing token: ${token}`).toBeDefined()
+    }
+    expect(typeof resolved.thinkingOpacity).toBe("number")
+  }
+})
+
+test("gehenna and gehenna-dim have no circular defs references", () => {
+  expect(() => resolveTheme(DEFAULT_THEMES["gehenna"]!, "dark")).not.toThrow()
+  expect(() => resolveTheme(DEFAULT_THEMES["gehenna"]!, "light")).not.toThrow()
+  expect(() => resolveTheme(DEFAULT_THEMES["gehenna-dim"]!, "dark")).not.toThrow()
+  expect(() => resolveTheme(DEFAULT_THEMES["gehenna-dim"]!, "light")).not.toThrow()
+})
+
 test("custom theme precedence follows directory order", async () => {
   await using tmp = await tmpdir()
   const global = path.join(tmp.path, "global")
