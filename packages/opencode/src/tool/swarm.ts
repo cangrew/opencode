@@ -33,7 +33,7 @@ const ItemSchema = Schema.Record(Schema.String, Schema.String)
 export const Parameters = Schema.Struct({
   template: Schema.String.annotate({ description: "Prompt template with {{placeholder}} markers" }),
   items: Schema.Array(ItemSchema).annotate({
-    description: 'Array of objects with an "id" field and placeholder values',
+    description: 'Array of objects with a required non-empty "id" field and placeholder values',
   }),
   agent: Schema.optional(Schema.String).annotate({ description: "Agent type to use for each item (default: general)" }),
   concurrency: Schema.optional(Schema.Number).annotate({
@@ -51,9 +51,12 @@ type ItemResult = {
   text: string
 }
 
+function escapeXml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+}
+
 function expandTemplate(template: string, item: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    if (key === "id") return item["id"] ?? ""
     if (!(key in item)) throw new Error(`Missing placeholder: ${key}`)
     return item[key]
   })
@@ -61,7 +64,10 @@ function expandTemplate(template: string, item: Record<string, string>): string 
 
 function renderSwarmResults(results: ItemResult[]): string {
   const items = results
-    .map((r) => `<item id="${r.id}" status="${r.status}" duration_ms="${r.duration_ms}">${r.text}</item>`)
+    .map(
+      (r) =>
+        `<item id="${escapeXml(r.id)}" status="${r.status}" duration_ms="${r.duration_ms}">${escapeXml(r.text)}</item>`,
+    )
     .join("\n")
   return `<swarm_results>\n${items}\n</swarm_results>`
 }
@@ -102,6 +108,10 @@ export const SwarmTool = Tool.define(
         return yield* Effect.fail(
           new Error(`items length ${params.items.length} exceeds swarm_max_items limit of ${maxItems}`),
         )
+      }
+      const missingId = params.items.findIndex((item) => !item["id"])
+      if (missingId >= 0) {
+        return yield* Effect.fail(new Error(`item at index ${missingId} is missing a required non-empty "id" field`))
       }
 
       const next = yield* agent.get(agentName)
@@ -159,12 +169,12 @@ export const SwarmTool = Tool.define(
 
         const runItem = (item: Record<string, string>): Effect.Effect<ItemResult> =>
           Effect.gen(function* () {
-            const itemId = item["id"] ?? ""
+            const itemId = item["id"]!
             const start = Date.now()
 
             const expanded = yield* Effect.try({
               try: () => expandTemplate(params.template, item),
-              catch: (err) => err instanceof Error ? err : new Error(String(err)),
+              catch: (err) => (err instanceof Error ? err : new Error(String(err))),
             })
 
             const childSession = yield* sessions.create({
@@ -207,11 +217,14 @@ export const SwarmTool = Tool.define(
               }).pipe(
                 Effect.timeout(Duration.millis(itemTimeoutMs)),
                 Effect.catch((err) =>
-                  Effect.succeed({
-                    id: itemId,
-                    status: "error" as const,
-                    duration_ms: Date.now() - start,
-                    text: err instanceof Error ? err.message : String(err),
+                  Effect.gen(function* () {
+                    yield* ops.cancel(childSession.id).pipe(Effect.ignore)
+                    return {
+                      id: itemId,
+                      status: "error" as const,
+                      duration_ms: Date.now() - start,
+                      text: err instanceof Error ? err.message : String(err),
+                    }
                   }),
                 ),
               ),
@@ -220,7 +233,7 @@ export const SwarmTool = Tool.define(
           }).pipe(
             Effect.catch((err) =>
               Effect.succeed({
-                id: item["id"] ?? "",
+                id: item["id"]!,
                 status: "error" as const,
                 duration_ms: 0,
                 text: err instanceof Error ? err.message : String(err),
