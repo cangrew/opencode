@@ -182,6 +182,18 @@ export const Info = Schema.Struct({
       policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
         description: "Policy statements applied to supported resources, such as provider access",
       }),
+      swarm: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable the swarm tool for parallel subagent fan-out",
+      }),
+      swarm_max_items: Schema.optional(PositiveInt).annotate({
+        description: "Maximum number of items per swarm call (default: 20)",
+      }),
+      swarm_concurrency: Schema.optional(PositiveInt).annotate({
+        description: "Maximum concurrent subagents in a swarm (default: 5)",
+      }),
+      swarm_item_timeout_ms: Schema.optional(PositiveInt).annotate({
+        description: "Per-item timeout in milliseconds for swarm subagents (default: 600000)",
+      }),
     }),
   ),
 }).annotate({ identifier: "Config" })

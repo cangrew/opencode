@@ -14,7 +14,7 @@ Review Tracking", for the full workflow.
 | sliding-window-compaction | changes-requested | 2026-06-18 | SW1: cut keeps tool-call/result pairs together; SW2: MIN defined, trim oldest |
 | prompt-cache-stability | changes-requested | 2026-06-18 | PC1: 1h TTL gated behind the flag to resolve the BREAKING:None contradiction |
 | background-subagents | changes-requested | 2026-06-18 | BG1: parent-termination ownership; BG2: added cancelled terminal state |
-| swarm-mode | changes-requested | 2026-06-18 | SM1: per-item timeout so a hung item never blocks the swarm |
+| swarm-mode | addressed | 2026-06-18 | SM1: per-item timeout so a hung item never blocks the swarm |
 | orchestration-guardrails | changes-requested | 2026-06-18 | OG1: doom-loop cap = 1000 calls/root; OG3: descendant cap now concurrent |
 | agent-memory | changes-requested | 2026-06-18 | AM1: enforced agent-scope seam for subagent exclusion; decay/relevance/caps remain (MEDIUM) |
 | goal-system | changes-requested | 2026-06-18 | GS1: state machine completed with manual pause/resume and budget_limited resume path |

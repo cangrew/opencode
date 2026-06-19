@@ -10,6 +10,7 @@ import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
+import { SwarmTool } from "./swarm"
 import { Database } from "@opencode-ai/core/database/database"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
@@ -91,6 +92,7 @@ export const layer = Layer.effect(
 
     const invalid = yield* InvalidTool
     const task = yield* TaskTool
+    const swarm = yield* SwarmTool
     const read = yield* ReadTool
     const question = yield* QuestionTool
     const todo = yield* TodoWriteTool
@@ -192,7 +194,7 @@ export const layer = Layer.effect(
           }
         }
 
-        yield* config.get()
+        const cfg = yield* config.get()
         const questionEnabled = ["app", "cli", "desktop"].includes(flags.client) || flags.enableQuestionTool
 
         const tool = yield* Effect.all({
@@ -212,6 +214,7 @@ export const layer = Layer.effect(
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          swarm: Tool.init(swarm),
         })
 
         return {
@@ -233,6 +236,7 @@ export const layer = Layer.effect(
             tool.patch,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
+            ...(cfg.experimental?.swarm ? [tool.swarm] : []),
           ],
           task: tool.task,
           read: tool.read,
