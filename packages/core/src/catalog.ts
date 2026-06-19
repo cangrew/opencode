@@ -11,6 +11,7 @@ import { EventV2 } from "./event"
 import { Policy } from "./policy"
 import { State } from "./state"
 import { Integration } from "./integration"
+import { Credential } from "./credential"
 
 export type ProviderRecord = {
   provider: ProviderV2.Info
@@ -91,6 +92,7 @@ export const layer = Layer.effect(
     const events = yield* EventV2.Service
     const policy = yield* Policy.Service
     const integrations = yield* Integration.Service
+    const credentials = yield* Credential.Service
     const scope = yield* Scope.Scope
 
     const available = (provider: ProviderV2.Info, integration: Integration.Info | undefined, connected: boolean) => {
@@ -131,6 +133,21 @@ export const layer = Layer.effect(
       item.api.url = item.request.body.baseURL
       delete item.request.body.baseURL
     }
+
+    const projectCredentials = Effect.fn("CatalogV2.projectCredentials")(function* (catalog: Editor) {
+      const saved = new Map((yield* credentials.all()).map((credential) => [credential.id, credential]))
+      const connections = yield* integrations.connection.list()
+      for (const item of catalog.provider.list()) {
+        const connection = connections.get(Integration.ID.make(item.provider.id))
+        if (connection?.type !== "credential") continue
+        const credential = saved.get(connection.id)
+        if (!credential) continue
+        catalog.provider.update(item.provider.id, (provider) => {
+          Object.assign(provider.request.body, credential.value.metadata ?? {})
+          provider.request.body.apiKey = credential.value.type === "key" ? credential.value.key : credential.value.access
+        })
+      }
+    })
 
     const state = State.create<Data, Editor>({
       initial: () => ({ providers: new Map() }),
@@ -187,6 +204,7 @@ export const layer = Layer.effect(
         return result
       },
       finalize: Effect.fn("CatalogV2.finalize")(function* (catalog, reason) {
+        if (yield* plugin.has()) yield* projectCredentials(catalog)
         if (reason !== "plugin.added") yield* plugin.trigger("catalog.transform", catalog, {}).pipe(Effect.asVoid)
         if (policy.hasStatements()) {
           for (const record of [...catalog.provider.list()]) {

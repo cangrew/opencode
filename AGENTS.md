@@ -8,6 +8,16 @@ Use a short branch name of at most three words, separated by hyphens. Do not use
 
 Examples: `session-recovery`, `fix-scroll-state`, `regenerate-sdk`.
 
+## Branching
+
+Non-trivial work happens on a branch, then merges via PR.
+
+- Branch off an up-to-date `dev`. Do not commit non-trivial changes directly to `dev`.
+- One branch per concern: a single feature or fix, the atomic-commit principle at branch scope.
+- A typo or one-line doc tweak may skip the branch; anything touching behavior or spanning multiple files gets its own branch.
+- Update against `origin/dev` and resolve conflicts on the branch before opening the PR.
+- Keep branches short-lived: open the PR early and merge promptly.
+
 ## Commits and PR Titles
 
 Use conventional commit-style messages and PR titles: `type(scope): summary`.
@@ -15,6 +25,36 @@ Use conventional commit-style messages and PR titles: `type(scope): summary`.
 Valid types are `feat`, `fix`, `docs`, `chore`, `refactor`, and `test`. Scopes are optional; use the affected package or area when helpful, e.g. `core`, `opencode`, `tui`, `app`, `desktop`, `sdk`, or `plugin`.
 
 Examples: `fix(tui): simplify thinking toggle styling`, `docs: update contributing guide`, `chore(sdk): regenerate types`.
+
+## Atomic Commits
+
+Each commit is one logical, self-contained change.
+
+- One concern per commit. Do not mix unrelated work (a fix plus a dependency bump plus a rename) in the same commit.
+- Keep every commit buildable: it should pass `bun lint` and `bun typecheck`, and keep package tests green on its own. Do not commit a knowingly broken state.
+- Separate mechanical changes (renames, moves, formatting) from behavior changes so diffs stay reviewable.
+- Stage deliberately with `git add -p` to split a mixed working tree into focused commits. Avoid `git add -A` by reflex.
+- Prefer many small commits over one large one. Each commit should be understandable in isolation.
+- Write imperative subjects that complete "this commit will ..." and explain the why (end user perspective) in the body when it is not obvious.
+- Only commit or push when asked. When you do, group the work into atomic commits rather than one catch-all commit.
+
+## OpenSpec Review Tracking
+
+Every OpenSpec change in `openspec/changes/<name>/` carries a review state so it is clear whether the proposal has been reviewed and whether feedback was handled.
+
+States (the `review:` field):
+
+- `open`: proposal created, not yet reviewed. This is the default on `/opsx-propose`.
+- `changes-requested`: reviewed, with feedback that must be handled before implementing.
+- `addressed`: feedback handled, or the review found nothing. The change is cleared to implement.
+
+Transitions are `open` -> `changes-requested` -> `addressed`. A clean review with no issues may go `open` -> `addressed` directly. Prefer `addressed` before `/opsx-apply`.
+
+Storage:
+
+- Source of truth: a `review:` key in each change's `.openspec.yaml`. It travels with the change and survives archive.
+- Index: `openspec/changes/REVIEW.md`, a table of `change | review | updated | notes` for an at-a-glance view.
+- Whenever you change a `review:` value in a `.openspec.yaml`, update that change's row in `REVIEW.md`. If the two disagree, the per-change yaml wins.
 
 ## Style Guide
 

@@ -1,6 +1,7 @@
 import { Schema } from "effect"
 import { HttpApi } from "effect/unstable/httpapi"
 import { EventV2 } from "@opencode-ai/core/event"
+import "@opencode-ai/core/subscription-usage"
 import { InstanceDisposed } from "@/server/event"
 import { Question } from "@/question"
 import { ConfigApi } from "./groups/config"

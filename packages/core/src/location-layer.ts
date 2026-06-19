@@ -41,6 +41,7 @@ import { AppProcess } from "./process"
 import { SessionStore } from "./session/store"
 import { SessionTodo } from "./session/todo"
 import { QuestionV2 } from "./question"
+import { SubscriptionUsage } from "./subscription-usage"
 import { LLMClient } from "@opencode-ai/llm"
 import { RequestExecutor } from "@opencode-ai/llm/route"
 import * as SessionRunnerLLM from "./session/runner/llm"
@@ -135,11 +136,12 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     Global.defaultLayer,
     Ripgrep.defaultLayer,
     Database.defaultLayer,
-    ProjectDirectories.defaultLayer,
-    SessionStore.layer.pipe(Layer.provide(Database.defaultLayer)),
-    PermissionSaved.defaultLayer,
-    RepositoryCache.defaultLayer,
-    LLMClient.layer.pipe(Layer.provide(RequestExecutor.defaultLayer)),
+      ProjectDirectories.defaultLayer,
+      SessionStore.layer.pipe(Layer.provide(Database.defaultLayer)),
+      PermissionSaved.defaultLayer,
+      SubscriptionUsage.defaultLayer,
+      RepositoryCache.defaultLayer,
+      LLMClient.layer.pipe(Layer.provide(RequestExecutor.defaultLayer)),
     FetchHttpClient.layer,
     ToolOutputStore.defaultCleanupLayer,
     ApplicationTools.layer,

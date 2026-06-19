@@ -689,6 +689,115 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("captures Codex subscription usage from successful response headers", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.succeed(
+              input.respond(sseEvents({ type: "response.completed", response: { id: "resp_1" } }), {
+                headers: {
+                  "content-type": "text/event-stream",
+                  "x-codex-primary-used-percent": "40",
+                  "x-codex-primary-window-minutes": "300",
+                  "x-codex-primary-reset-after-seconds": "7200",
+                },
+              }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events).toMatchObject([
+        { type: "step-start", index: 0 },
+        {
+          type: "step-finish",
+          providerMetadata: {
+            openai: {
+              responseId: "resp_1",
+              subscriptionUsage: {
+                primary: {
+                  usedPercent: 40,
+                  windowMinutes: 300,
+                },
+              },
+            },
+          },
+        },
+        {
+          type: "finish",
+          providerMetadata: {
+            openai: {
+              responseId: "resp_1",
+              subscriptionUsage: {
+                primary: {
+                  usedPercent: 40,
+                  windowMinutes: 300,
+                },
+              },
+            },
+          },
+        },
+      ])
+    }),
+  )
+
+  it.effect("captures Codex subscription usage from rate_limits snapshots", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "response.completed",
+              response: {
+                id: "resp_1",
+                rate_limits: {
+                  primary: {
+                    used_percent: 55,
+                    window_minutes: 300,
+                    reset_after_seconds: 1800,
+                  },
+                },
+              },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.events).toMatchObject([
+        { type: "step-start", index: 0 },
+        {
+          type: "step-finish",
+          providerMetadata: {
+            openai: {
+              responseId: "resp_1",
+              subscriptionUsage: {
+                primary: {
+                  usedPercent: 55,
+                  windowMinutes: 300,
+                },
+              },
+            },
+          },
+        },
+        {
+          type: "finish",
+          providerMetadata: {
+            openai: {
+              responseId: "resp_1",
+              subscriptionUsage: {
+                primary: {
+                  usedPercent: 55,
+                  windowMinutes: 300,
+                },
+              },
+            },
+          },
+        },
+      ])
+    }),
+  )
+
   it.effect("parses reasoning summary stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(
@@ -1312,7 +1421,14 @@ describe("OpenAI Responses route", () => {
         ),
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "server_error: Upstream model unavailable" }])
+      expect(response.events).toEqual([
+        {
+          type: "provider-error",
+          message: "server_error: Upstream model unavailable",
+          classification: undefined,
+          providerMetadata: { openai: { responseId: "resp_failed_1" } },
+        },
+      ])
     }),
   )
 
@@ -1329,7 +1445,14 @@ describe("OpenAI Responses route", () => {
         ),
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "invalid_prompt" }])
+      expect(response.events).toEqual([
+        {
+          type: "provider-error",
+          message: "invalid_prompt",
+          classification: undefined,
+          providerMetadata: { openai: { responseId: "resp_failed_2" } },
+        },
+      ])
     }),
   )
 
@@ -1377,7 +1500,14 @@ describe("OpenAI Responses route", () => {
         Effect.provide(fixedResponse(sseEvents({ type: "response.failed", response: { id: "resp_failed_3" } }))),
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "OpenAI Responses response failed" }])
+      expect(response.events).toEqual([
+        {
+          type: "provider-error",
+          message: "OpenAI Responses response failed",
+          classification: undefined,
+          providerMetadata: { openai: { responseId: "resp_failed_3" } },
+        },
+      ])
     }),
   )
 

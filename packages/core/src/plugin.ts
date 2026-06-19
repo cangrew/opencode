@@ -85,6 +85,7 @@ export interface Interface {
     input: HookInput<Name>,
     output: HookOutput<Name>,
   ) => Effect.Effect<HookInput<Name> & HookOutput<Name>>
+  readonly has: () => Effect.Effect<boolean>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Plugin") {}
@@ -174,6 +175,9 @@ export const layer = Layer.effect(
             if (existing) yield* Scope.close(existing.scope, Exit.void).pipe(Effect.ignore)
           }),
         )
+      }),
+      has: Effect.fn("Plugin.has")(function* () {
+        return hooks.length > 0
       }),
     })
     return svc

@@ -1,29 +1,17 @@
-import { ToolOutput, type LLMEvent, type ProviderMetadata, type ToolResultValue, type Usage } from "@opencode-ai/llm"
+import { ToolOutput, type LLMEvent, type ProviderMetadata, type ToolResultValue } from "@opencode-ai/llm"
 import { DateTime, Effect } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
 import { SessionEvent } from "../event"
 import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
+import { SessionRunnerCost } from "./cost"
 
 type Input = {
   readonly sessionID: SessionSchema.ID
   readonly agent: string
   readonly model: ModelV2.Ref
-}
-
-const safe = (value: number | undefined) => Math.max(0, Number.isFinite(value) ? (value ?? 0) : 0)
-
-const tokens = (usage: Usage | undefined) => {
-  const reasoning = safe(usage?.reasoningTokens)
-  const read = safe(usage?.cacheReadInputTokens)
-  const write = safe(usage?.cacheWriteInputTokens)
-  return {
-    input: safe(usage?.nonCachedInputTokens),
-    output: safe(usage?.visibleOutputTokens),
-    reasoning,
-    cache: { read, write },
-  }
+  readonly modelCost: ModelV2.Info["cost"]
 }
 
 const record = (value: unknown): Record<string, unknown> =>
@@ -374,14 +362,15 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         return
       }
       case "step-finish":
+        const usage = SessionRunnerCost.tokens(event.usage)
         yield* flush()
         yield* events.publish(SessionEvent.Step.Ended, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
           assistantMessageID: yield* startAssistant(),
           finish: event.reason,
-          cost: 0,
-          tokens: tokens(event.usage),
+          cost: SessionRunnerCost.computeCost(input.modelCost, usage, SessionRunnerCost.contextSize(event.usage)),
+          tokens: usage,
         })
         return
       case "finish":

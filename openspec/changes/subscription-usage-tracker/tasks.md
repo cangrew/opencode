@@ -28,24 +28,24 @@
 
 ## 4. Server and SDK
 
-- [ ] 4.1 Add read/list endpoints returning latest subscription usage by provider/account and all latest snapshots needed for startup hydration (empty result/list when none has been captured)
-- [ ] 4.2 Add the subscription usage update as an EventV2 global event that reaches TUI clients through the existing EventV2 bridge/GlobalBus path
-- [ ] 4.3 Regenerate `packages/sdk/js` and verify the generated types
-- [ ] 4.4 Endpoint tests: returns a stored snapshot, lists stored snapshots, returns empty when none exists, and generated SDK types include the endpoint and event
+- [x] 4.1 Add read/list endpoints returning latest subscription usage by provider/account and all latest snapshots needed for startup hydration (empty result/list when none has been captured)
+- [x] 4.2 Add the subscription usage update as an EventV2 global event that reaches TUI clients through the existing EventV2 bridge/GlobalBus path
+- [x] 4.3 Regenerate `packages/sdk/js` and verify the generated types
+- [x] 4.4 Endpoint tests: returns a stored snapshot, lists stored snapshots, returns empty when none exists, and generated SDK types include the endpoint and event
 
 ## 5. TUI Usage panel (packages/tui)
 
-- [ ] 5.1 Add subscription usage state to `packages/tui/src/context/sync.tsx`, hydrate it from the read/list endpoint on startup, and update it from the global subscription usage event
-- [ ] 5.2 Expose subscription usage through the TUI plugin state API used by sidebar feature plugins
-- [ ] 5.3 Add `packages/tui/src/feature-plugins/sidebar/usage.tsx` rendering cumulative token breakdown (input, output, reasoning, cache), total cost as currency, and current context fill percent from session/message state
-- [ ] 5.4 Compute context fill from current context pressure, not cumulative session totals
-- [ ] 5.5 Render the primary and secondary subscription meters with used percent and a reset countdown when a snapshot exists for the active OpenAI account
-- [ ] 5.6 Register the plugin in `packages/tui/src/feature-plugins/builtins.ts` and leave the existing Context widget unchanged
-- [ ] 5.7 Hide the subscription section when no snapshot exists, for example API key providers, and update meters downward after a rolling-window reset
+- [x] 5.1 Add subscription usage state to `packages/tui/src/context/sync.tsx`, hydrate it from the read/list endpoint on startup, and update it from the global subscription usage event
+- [x] 5.2 Expose subscription usage through the TUI plugin state API used by sidebar feature plugins
+- [x] 5.3 Add `packages/tui/src/feature-plugins/sidebar/usage.tsx` rendering cumulative token breakdown (input, output, reasoning, cache), total cost as currency, and current context fill percent from session/message state
+- [x] 5.4 Compute context fill from current context pressure, not cumulative session totals
+- [x] 5.5 Render the primary and secondary subscription meters with used percent and a reset countdown when a snapshot exists for the active OpenAI account
+- [x] 5.6 Register the plugin in `packages/tui/src/feature-plugins/builtins.ts` and leave the existing Context widget unchanged
+- [x] 5.7 Hide the subscription section when no snapshot exists, for example API key providers, and update meters downward after a rolling-window reset
 
 ## 6. Verification
 
-- [ ] 6.1 `bun typecheck` and `bun lint` pass
+- [x] 6.1 `bun typecheck` and `bun lint` pass
 - [ ] 6.2 Package tests pass: `cd packages/core && bun test` and `cd packages/opencode && bun test`
 - [ ] 6.3 Manual: run `bun dev`, open the sidebar, confirm the token breakdown and cost render; with an OpenAI subscription account confirm the limit meters appear and update after a turn
-- [ ] 6.4 `openspec validate subscription-usage-tracker` passes
+- [x] 6.4 `openspec validate subscription-usage-tracker` passes

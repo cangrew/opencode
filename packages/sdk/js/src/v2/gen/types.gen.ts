@@ -66,6 +66,7 @@ export type Event =
   | EventQuestionV2Replied
   | EventQuestionV2Rejected
   | EventTodoUpdated
+  | EventSubscriptionUsageUpdated
   | EventLspUpdated
   | EventPermissionAsked
   | EventPermissionReplied
@@ -1375,6 +1376,13 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           todos: Array<Todo>
+        }
+      }
+    | {
+        id: string
+        type: "subscription-usage.updated"
+        properties: {
+          usage: SubscriptionUsageInfo
         }
       }
     | {
@@ -2932,6 +2940,20 @@ export type QuestionV2Tool = {
 }
 
 export type QuestionV2Answer = Array<string>
+
+export type SubscriptionUsageWindow = {
+  usedPercent: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  windowMinutes: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  resetsAt: number
+}
+
+export type SubscriptionUsageInfo = {
+  provider: string
+  accountID: string
+  primary?: SubscriptionUsageWindow
+  secondary?: SubscriptionUsageWindow
+  capturedAt: number
+}
 
 export type EventServerInstanceDisposed = {
   id: string
@@ -4921,6 +4943,20 @@ export type EventTodoUpdated = {
   properties: {
     sessionID: string
     todos: Array<Todo>
+  }
+}
+
+export type SubscriptionUsageWindow1 = {
+  usedPercent: number | "NaN" | "Infinity" | "-Infinity"
+  windowMinutes: number | "NaN" | "Infinity" | "-Infinity"
+  resetsAt: number
+}
+
+export type EventSubscriptionUsageUpdated = {
+  id: string
+  type: "subscription-usage.updated"
+  properties: {
+    usage: SubscriptionUsageInfo
   }
 }
 
@@ -7398,6 +7434,69 @@ export type ProviderAuthResponses = {
 }
 
 export type ProviderAuthResponse = ProviderAuthResponses[keyof ProviderAuthResponses]
+
+export type ProviderSubscriptionUsageListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/subscription-usage"
+}
+
+export type ProviderSubscriptionUsageListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderSubscriptionUsageListError =
+  ProviderSubscriptionUsageListErrors[keyof ProviderSubscriptionUsageListErrors]
+
+export type ProviderSubscriptionUsageListResponses = {
+  /**
+   * Provider subscription usage snapshots
+   */
+  200: Array<SubscriptionUsageInfo>
+}
+
+export type ProviderSubscriptionUsageListResponse =
+  ProviderSubscriptionUsageListResponses[keyof ProviderSubscriptionUsageListResponses]
+
+export type ProviderSubscriptionUsageGetData = {
+  body?: never
+  path: {
+    providerID: string
+    accountID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/subscription-usage/{providerID}/{accountID}"
+}
+
+export type ProviderSubscriptionUsageGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderSubscriptionUsageGetError =
+  ProviderSubscriptionUsageGetErrors[keyof ProviderSubscriptionUsageGetErrors]
+
+export type ProviderSubscriptionUsageGetResponses = {
+  /**
+   * Provider subscription usage snapshot
+   */
+  200: SubscriptionUsageInfo
+}
+
+export type ProviderSubscriptionUsageGetResponse =
+  ProviderSubscriptionUsageGetResponses[keyof ProviderSubscriptionUsageGetResponses]
 
 export type ProviderOauthAuthorizeData = {
   body?: {

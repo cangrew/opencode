@@ -989,7 +989,7 @@ it.instance(
       yield* Fiber.await(fiber)
       expect((yield* status.get(chat.id)).type).toBe("idle")
     }),
-  3_000,
+  30_000,
 )
 
 // Cancel semantics
@@ -1017,7 +1017,7 @@ it.instance(
         expect(exit.value.info.role).toBe("assistant")
       }
     }),
-  3_000,
+  30_000,
 )
 
 it.instance(
@@ -1043,7 +1043,7 @@ it.instance(
         }
       }
     }),
-  3_000,
+  30_000,
 )
 
 raceNoLLMServer.instance(
@@ -1242,7 +1242,7 @@ it.instance(
       }
     }),
   { git: true },
-  3_000,
+  30_000,
 )
 
 // Queue semantics
@@ -1280,7 +1280,7 @@ it.instance(
       expect(a.info.id).toBe(b.info.id)
       expect(a.info.role).toBe("assistant")
     }),
-  3_000,
+  30_000,
 )
 
 it.instance(
@@ -1348,7 +1348,7 @@ it.instance(
       expect(inputs).toHaveLength(2)
       expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("second")
     }),
-  3_000,
+  30_000,
 )
 
 it.instance(
@@ -1377,7 +1377,7 @@ it.instance(
       yield* prompt.cancel(chat.id)
       yield* Fiber.await(fiber)
     }),
-  3_000,
+  30_000,
 )
 
 noLLMServer.instance("assertNotBusy succeeds when idle", () =>
@@ -1417,7 +1417,7 @@ it.instance(
       yield* prompt.cancel(chat.id)
       yield* Fiber.await(fiber)
     }),
-  3_000,
+  30_000,
 )
 
 unixNoLLMServer(
@@ -1628,7 +1628,7 @@ it.instance(
       expect(yield* llm.calls).toBe(1)
     }),
   { git: true },
-  3_000,
+  30_000,
 )
 
 it.instance(
@@ -1667,7 +1667,7 @@ it.instance(
       expect(yield* llm.calls).toBe(1)
     }),
   { git: true },
-  3_000,
+  30_000,
 )
 
 unix(

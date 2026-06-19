@@ -23,6 +23,7 @@ import {
   UnknownProviderReason,
 } from "../schema"
 import { isContextOverflow } from "../provider-error"
+import { SubscriptionUsage } from "../subscription-usage"
 
 export interface Interface {
   readonly execute: (
@@ -228,25 +229,32 @@ const statusReason = (input: {
   readonly retryAfterMs?: number | undefined
   readonly rateLimit?: HttpRateLimitDetails | undefined
   readonly http: HttpContext
+  readonly providerMetadata?: Record<string, Record<string, unknown>> | undefined
 }) => {
   const body = input.http.body ?? ""
   if (/content[-_\s]?policy|content_filter|safety/i.test(body)) {
-    return new ContentPolicyReason({ message: input.message, http: input.http })
+    return new ContentPolicyReason({ message: input.message, providerMetadata: input.providerMetadata, http: input.http })
   }
   if (input.status === 401) {
-    return new AuthenticationReason({ message: input.message, kind: "invalid", http: input.http })
+    return new AuthenticationReason({ message: input.message, kind: "invalid", providerMetadata: input.providerMetadata, http: input.http })
   }
   if (input.status === 403) {
-    return new AuthenticationReason({ message: input.message, kind: "insufficient-permissions", http: input.http })
+    return new AuthenticationReason({
+      message: input.message,
+      kind: "insufficient-permissions",
+      providerMetadata: input.providerMetadata,
+      http: input.http,
+    })
   }
   if (input.status === 429) {
     if (/insufficient[-_\s]?quota|quota[-_\s]?exceeded/i.test(body)) {
-      return new QuotaExceededReason({ message: input.message, http: input.http })
+      return new QuotaExceededReason({ message: input.message, providerMetadata: input.providerMetadata, http: input.http })
     }
     return new RateLimitReason({
       message: input.message,
       retryAfterMs: input.retryAfterMs,
       rateLimit: input.rateLimit,
+      providerMetadata: input.providerMetadata,
       http: input.http,
     })
   }
@@ -260,6 +268,7 @@ const statusReason = (input: {
     return new InvalidRequestReason({
       message: input.message,
       classification: isContextOverflow(body) ? "context-overflow" : undefined,
+      providerMetadata: input.providerMetadata,
       http: input.http,
     })
   }
@@ -268,10 +277,16 @@ const statusReason = (input: {
       message: input.message,
       status: input.status,
       retryAfterMs: input.retryAfterMs,
+      providerMetadata: input.providerMetadata,
       http: input.http,
     })
   }
-  return new UnknownProviderReason({ message: input.message, status: input.status, http: input.http })
+  return new UnknownProviderReason({
+    message: input.message,
+    status: input.status,
+    providerMetadata: input.providerMetadata,
+    http: input.http,
+  })
 }
 
 const statusError =
@@ -283,18 +298,22 @@ const statusError =
       const headers = normalizedHeaders(response.headers)
       const retryAfter = retryAfterMs(headers)
       const rateLimit = rateLimitDetails(headers, retryAfter)
+      const providerMetadata = SubscriptionUsage.providerMetadata({
+        subscriptionUsage: SubscriptionUsage.fromHeaders(headers),
+      })
       const details = responseBody(body, request)
       return yield* new LLMError({
         module: "RequestExecutor",
         method: "execute",
         reason: statusReason({
           status: response.status,
-          message: providerMessage(response.status, details),
-          retryAfterMs: retryAfter,
-          rateLimit,
-          http: responseHttp({
-            request,
-            response,
+            message: providerMessage(response.status, details),
+            retryAfterMs: retryAfter,
+            rateLimit,
+            providerMetadata,
+            http: responseHttp({
+              request,
+              response,
             redactedNames,
             body: details,
             requestId: requestId(headers),

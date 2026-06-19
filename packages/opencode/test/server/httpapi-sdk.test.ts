@@ -219,8 +219,12 @@ function httpapiInstance<A, E>(
   )
 }
 
-function serverPathParity<A, E>(name: string, scenario: (serverPath: ServerPath) => Effect.Effect<A, E, TestScope>) {
-  it.live(name, scenario("raw"))
+function serverPathParity<A, E>(
+  name: string,
+  scenario: (serverPath: ServerPath) => Effect.Effect<A, E, TestScope>,
+  timeout?: number,
+) {
+  it.live(name, scenario("raw"), timeout)
 }
 
 function withProject<A, E, E2 = never>(
@@ -379,6 +383,18 @@ describe("HttpApi SDK", () => {
       }),
   )
 
+  httpapiInstance(
+    "uses the generated SDK for provider subscription usage routes",
+    { serverPath: "raw", git: false, setup: writeStandardFiles },
+    ({ sdk }) =>
+      Effect.gen(function* () {
+        const listed = yield* call(() => sdk.provider.subscriptionUsage.list())
+
+        expect(listed.response.status).toBe(200)
+        expect(listed.data).toEqual([])
+      }),
+  )
+
   httpapi(
     "routes configured SDK directory and workspace for v2 location GETs",
     withProject("raw", { setup: writeStandardFiles }, ({ directory }) =>
@@ -509,56 +525,59 @@ describe("HttpApi SDK", () => {
       }),
   )
 
-  serverPathParity("matches generated SDK instance read routes", (serverPath) =>
-    withProject(serverPath, { git: true, setup: writeStandardFiles }, ({ sdk, directory }) =>
-      Effect.gen(function* () {
-        const project = yield* capture(() => sdk.project.current())
-        const projects = yield* capture(() => sdk.project.list())
-        const paths = yield* capture(() => sdk.path.get())
-        const config = yield* capture(() => sdk.config.get())
-        const providers = yield* capture(() => sdk.config.providers())
-        const file = yield* capture(() => sdk.file.read({ path: "hello.txt" }))
-        const files = yield* capture(() => sdk.file.list({ path: "." }))
-        const fileStatus = yield* capture(() => sdk.file.status())
-        const findFiles = yield* capture(() => sdk.find.files({ query: "hello", limit: 10 }))
-        const findText = yield* capture(() => sdk.find.text({ pattern: "sdk-parity" }))
-        const agents = yield* capture(() => sdk.app.agents())
-        const skills = yield* capture(() => sdk.app.skills())
-        const tools = yield* capture(() => sdk.tool.ids())
-        const vcs = yield* capture(() => sdk.vcs.get())
-        const formatter = yield* capture(() => sdk.formatter.status())
-        const lsp = yield* capture(() => sdk.lsp.status())
+  serverPathParity(
+    "matches generated SDK instance read routes",
+    (serverPath) =>
+      withProject(serverPath, { git: true, setup: writeStandardFiles }, ({ sdk, directory }) =>
+        Effect.gen(function* () {
+          const project = yield* capture(() => sdk.project.current())
+          const projects = yield* capture(() => sdk.project.list())
+          const paths = yield* capture(() => sdk.path.get())
+          const config = yield* capture(() => sdk.config.get())
+          const providers = yield* capture(() => sdk.config.providers())
+          const file = yield* capture(() => sdk.file.read({ path: "hello.txt" }))
+          const files = yield* capture(() => sdk.file.list({ path: "." }))
+          const fileStatus = yield* capture(() => sdk.file.status())
+          const findFiles = yield* capture(() => sdk.find.files({ query: "hello", limit: 10 }))
+          const findText = yield* capture(() => sdk.find.text({ pattern: "sdk-parity" }))
+          const agents = yield* capture(() => sdk.app.agents())
+          const skills = yield* capture(() => sdk.app.skills())
+          const tools = yield* capture(() => sdk.tool.ids())
+          const vcs = yield* capture(() => sdk.vcs.get())
+          const formatter = yield* capture(() => sdk.formatter.status())
+          const lsp = yield* capture(() => sdk.lsp.status())
 
-        return {
-          statuses: statuses({
-            project,
-            projects,
-            paths,
-            config,
-            providers,
-            file,
-            files,
-            fileStatus,
-            findFiles,
-            findText,
-            agents,
-            skills,
-            tools,
-            vcs,
-            formatter,
-            lsp,
-          }),
-          project: { worktreeSelected: record(project.data).worktree === directory },
-          paths: { directorySelected: record(paths.data).directory === directory },
-          file: record(file.data).content,
-          hasProject: array(projects.data).length > 0,
-          foundFile: JSON.stringify(findFiles.data).includes("hello.txt"),
-          foundText: JSON.stringify(findText.data ?? null).includes("sdk-parity"),
-          listedFile: JSON.stringify(files.data).includes("hello.txt"),
-          vcs: { hasBranch: typeof record(vcs.data).branch === "string" },
-        }
-      }),
-    ),
+          return {
+            statuses: statuses({
+              project,
+              projects,
+              paths,
+              config,
+              providers,
+              file,
+              files,
+              fileStatus,
+              findFiles,
+              findText,
+              agents,
+              skills,
+              tools,
+              vcs,
+              formatter,
+              lsp,
+            }),
+            project: { worktreeSelected: record(project.data).worktree === directory },
+            paths: { directorySelected: record(paths.data).directory === directory },
+            file: record(file.data).content,
+            hasProject: array(projects.data).length > 0,
+            foundFile: JSON.stringify(findFiles.data).includes("hello.txt"),
+            foundText: JSON.stringify(findText.data ?? null).includes("sdk-parity"),
+            listedFile: JSON.stringify(files.data).includes("hello.txt"),
+            vcs: { hasBranch: typeof record(vcs.data).branch === "string" },
+          }
+        }),
+      ),
+    30_000,
   )
 
   serverPathParity("matches generated SDK session lifecycle routes", (serverPath) =>

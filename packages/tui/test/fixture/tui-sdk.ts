@@ -73,6 +73,7 @@ export function createFetch(override?: FetchHandler) {
     if (url.pathname === "/api/reference")
       return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
     if (url.pathname === "/provider") return json({ all: [], default: {}, connected: [] })
+    if (url.pathname === "/provider/subscription-usage") return json([])
     if (url.pathname === "/session") return json([])
     if (url.pathname === "/vcs") return json({ branch: "main" })
     throw new Error(`unexpected request: ${url.pathname}`)

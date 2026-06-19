@@ -23,7 +23,7 @@ const Event = Schema.Struct({
   type: Schema.String,
   location: Schema.Struct({
     directory: Schema.String,
-    project: Schema.Struct({ id: Schema.String, directory: Schema.String }),
+    project: Schema.optional(Schema.Struct({ id: Schema.String, directory: Schema.String })),
   }),
   data: Schema.Unknown,
 })

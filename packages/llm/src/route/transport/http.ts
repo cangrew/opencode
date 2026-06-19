@@ -3,7 +3,7 @@ import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { Auth } from "../auth"
 import { render as renderEndpoint } from "../endpoint"
 import { Framing, type Framing as FramingDef } from "../framing"
-import type { Transport, TransportPrepareInput } from "./index"
+import type { Transport, TransportPrepareInput, TransportResponse } from "./index"
 import * as ProviderShared from "../../protocols/shared"
 import { mergeJsonRecords, type LLMRequest } from "../../schema"
 
@@ -19,7 +19,11 @@ export interface JsonRequestParts<Body = unknown> {
 export interface HttpPrepared<Frame> {
   readonly request: HttpClientRequest.HttpClientRequest
   readonly framing: FramingDef<Frame>
+  response?: TransportResponse
 }
+
+const normalizedHeaders = (headers: Headers.Headers) =>
+  Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]))
 
 const applyQuery = (url: string, query: Record<string, string> | undefined) => {
   if (!query) return url
@@ -85,8 +89,9 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
       runtime.http
         .execute(prepared.request)
         .pipe(
-          Effect.map((response) =>
-            prepared.framing.frame(
+          Effect.map((response) => {
+            prepared.response = { headers: normalizedHeaders(response.headers) }
+            return prepared.framing.frame(
               response.stream.pipe(
                 Stream.mapError((error) =>
                   ProviderShared.eventError(
@@ -96,8 +101,8 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
                   ),
                 ),
               ),
-            ),
-          ),
+            )
+          }),
         ),
     ),
 })

@@ -15,6 +15,7 @@ import { SessionV2 } from "@opencode-ai/core/session"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SubscriptionUsage } from "@opencode-ai/core/subscription-usage"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
@@ -86,6 +87,7 @@ const runner = SessionRunnerLLM.defaultLayer.pipe(
   Layer.provide(skillGuidance),
   Layer.provide(referenceGuidance),
   Layer.provide(config),
+  Layer.provide(SubscriptionUsage.defaultLayer),
 )
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(

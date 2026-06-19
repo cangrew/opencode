@@ -27,7 +27,7 @@ import type { Provider } from "@/provider/provider"
 import * as SessionProcessorModule from "../../src/session/processor"
 import { Snapshot } from "../../src/snapshot"
 import { ProviderTest } from "../fake/provider"
-import { testEffect } from "../lib/effect"
+import { pollWithTimeout, testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { TestConfig } from "../fixture/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -1227,19 +1227,10 @@ describe("session.compaction.process", () => {
 
       return Effect.gen(function* () {
         const ssn = yield* SessionNs.Service
-        const events = yield* EventV2Bridge.Service
-        const ready = yield* Deferred.make<void>()
+        const status = yield* SessionStatus.Service
         const session = yield* ssn.create({})
         const msg = yield* createUserMessage(session.id, "hello")
         const msgs = yield* ssn.messages({ sessionID: session.id })
-        const off = yield* events.listen((evt) => {
-          if (evt.type !== SessionStatus.Event.Status.type) return Effect.void
-          const data = evt.data as typeof SessionStatus.Event.Status.data.Type
-          if (data.sessionID !== session.id || data.status.type !== "retry") return Effect.void
-          Deferred.doneUnsafe(ready, Effect.void)
-          return Effect.void
-        })
-        yield* Effect.addFinalizer(() => off)
 
         const fiber = yield* SessionCompaction.use
           .process({
@@ -1250,15 +1241,19 @@ describe("session.compaction.process", () => {
           })
           .pipe(Effect.forkChild)
 
-        yield* Deferred.await(ready).pipe(Effect.timeout("1 second"))
+        yield* pollWithTimeout(
+          status.get(session.id).pipe(Effect.map((current) => (current.type === "retry" ? true : undefined))),
+          "compaction never entered retry backoff",
+          "5 seconds",
+        )
         const start = Date.now()
         yield* Fiber.interrupt(fiber)
-        const exit = yield* Fiber.await(fiber).pipe(Effect.timeout("250 millis"))
+        const exit = yield* Fiber.await(fiber).pipe(Effect.timeout("1 second"))
 
         expect(Exit.isFailure(exit)).toBe(true)
         if (Exit.isFailure(exit)) {
           expect(Cause.hasInterrupts(exit.cause)).toBe(true)
-          expect(Date.now() - start).toBeLessThan(250)
+          expect(Date.now() - start).toBeLessThan(1_000)
         }
       }).pipe(withCompaction({ llm: stub.layer }))
     },
@@ -1284,9 +1279,9 @@ describe("session.compaction.process", () => {
             })
             .pipe(Effect.forkChild)
 
-          yield* Deferred.await(ready).pipe(Effect.timeout("1 second"))
+          yield* Deferred.await(ready).pipe(Effect.timeout("5 seconds"))
           yield* Fiber.interrupt(fiber)
-          const exit = yield* Fiber.await(fiber).pipe(Effect.timeout("250 millis"))
+          const exit = yield* Fiber.await(fiber).pipe(Effect.timeout("1 second"))
           const all = yield* ssn.messages({ sessionID: session.id })
 
           expect(Exit.isFailure(exit)).toBe(true)

@@ -61,6 +61,7 @@ import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SubscriptionUsage } from "@opencode-ai/core/subscription-usage"
 import { lazy } from "@/util/lazy"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@opencode-ai/server/cors"
 import { serveUIEffect } from "@/server/shared/ui"
@@ -277,6 +278,7 @@ export function createRoutes(
       fenceLayer,
       cors(corsOptions),
       MoveSession.defaultLayer,
+      SubscriptionUsage.defaultLayer,
       HttpServer.layerServices,
     ]),
     Layer.provide(LayerNode.buildLayer(app)),

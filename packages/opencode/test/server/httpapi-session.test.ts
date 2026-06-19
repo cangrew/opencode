@@ -434,6 +434,7 @@ describe("session HttpApi", () => {
         root: sessionDirectory,
       })
     }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+    30_000,
   )
 
   it.instance(

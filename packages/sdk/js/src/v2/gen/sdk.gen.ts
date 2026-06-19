@@ -145,6 +145,10 @@ import type {
   ProviderOauthAuthorizeResponses,
   ProviderOauthCallbackErrors,
   ProviderOauthCallbackResponses,
+  ProviderSubscriptionUsageGetErrors,
+  ProviderSubscriptionUsageGetResponses,
+  ProviderSubscriptionUsageListErrors,
+  ProviderSubscriptionUsageListResponses,
   PtyConnectErrors,
   PtyConnectResponses,
   PtyConnectTokenErrors,
@@ -3136,6 +3140,80 @@ export class Permission extends HeyApiClient {
   }
 }
 
+export class SubscriptionUsage extends HeyApiClient {
+  /**
+   * List subscription usage
+   *
+   * List the latest subscription usage snapshots captured for provider accounts.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ProviderSubscriptionUsageListResponses,
+      ProviderSubscriptionUsageListErrors,
+      ThrowOnError
+    >({
+      url: "/provider/subscription-usage",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get subscription usage
+   *
+   * Get the latest subscription usage snapshot for a provider account.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      accountID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "path", key: "accountID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ProviderSubscriptionUsageGetResponses,
+      ProviderSubscriptionUsageGetErrors,
+      ThrowOnError
+    >({
+      url: "/provider/subscription-usage/{providerID}/{accountID}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Oauth extends HeyApiClient {
   /**
    * Start OAuth authorization
@@ -3289,6 +3367,11 @@ export class Provider extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _subscriptionUsage?: SubscriptionUsage
+  get subscriptionUsage(): SubscriptionUsage {
+    return (this._subscriptionUsage ??= new SubscriptionUsage({ client: this.client }))
   }
 
   private _oauth?: Oauth

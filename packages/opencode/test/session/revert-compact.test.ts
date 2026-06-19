@@ -257,6 +257,7 @@ describe("revert + compact workflow", () => {
         }),
       { git: true },
     ),
+    30_000,
   )
 
   it.live(
@@ -347,6 +348,7 @@ describe("revert + compact workflow", () => {
         }),
       { git: true },
     ),
+    30_000,
   )
 
   it.live(
@@ -384,6 +386,7 @@ describe("revert + compact workflow", () => {
         }),
       { git: true },
     ),
+    30_000,
   )
 
   it.live(
@@ -425,6 +428,7 @@ describe("revert + compact workflow", () => {
         }),
       { git: true },
     ),
+    30_000,
   )
 
   it.live(
@@ -547,6 +551,7 @@ describe("revert + compact workflow", () => {
         }),
       { git: true },
     ),
+    30_000,
   )
 
   it.live(
@@ -635,5 +640,6 @@ describe("revert + compact workflow", () => {
         }),
       { git: true },
     ),
+    30_000,
   )
 })

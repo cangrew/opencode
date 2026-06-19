@@ -115,6 +115,9 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
         branch: sync.data.vcs.branch,
       }
     },
+    subscriptionUsage() {
+      return sync.data.subscription_usage
+    },
     session: {
       count() {
         return sync.data.session.length

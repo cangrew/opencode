@@ -45,6 +45,7 @@ const capture = () => {
         id: ModelV2.ID.make("model"),
         providerID: ProviderV2.ID.make("provider"),
       },
+      modelCost: [],
     }),
   }
 }

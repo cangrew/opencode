@@ -5,6 +5,7 @@ import { Headers, HttpClient, HttpClientRequest, HttpClientResponse } from "effe
 import { LLM, LLMError } from "../src"
 import { LLMClient, RequestExecutor } from "../src/route"
 import * as OpenAIChat from "../src/protocols/openai-chat"
+import type { SubscriptionUsage } from "../src/subscription-usage"
 import { dynamicResponse } from "./lib/http"
 import { deltaChunk } from "./lib/openai-chunks"
 import { sseRaw } from "./lib/sse"
@@ -240,6 +241,49 @@ describe("RequestExecutor", () => {
                   "anthropic-ratelimit-input-tokens-limit": "10000",
                   "anthropic-ratelimit-input-tokens-remaining": "9000",
                   "anthropic-ratelimit-input-tokens-reset": "2026-05-06T12:00:10Z",
+                },
+              }),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("captures Codex subscription usage headers on usage-limit errors", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "RateLimit" })
+      const providerMetadata = "providerMetadata" in error.reason ? error.reason.providerMetadata : undefined
+      expect(providerMetadata).toMatchObject({
+        openai: {
+          subscriptionUsage: {
+            primary: {
+              usedPercent: 100,
+              windowMinutes: 300,
+            },
+          },
+        },
+      })
+      const subscriptionUsage = providerMetadata?.openai?.subscriptionUsage as SubscriptionUsage.Snapshot | undefined
+      const primary = subscriptionUsage?.primary
+      expect(typeof primary?.resetsAt).toBe("string")
+      expect(Number.isNaN(Date.parse(primary?.resetsAt ?? ""))).toBe(false)
+    }).pipe(
+      Effect.provide(
+        responsesLayer(
+          Array.from(
+            { length: 3 },
+            () =>
+              new Response("limit reached", {
+                status: 429,
+                headers: {
+                  "retry-after-ms": "0",
+                  "x-codex-primary-used-percent": "100",
+                  "x-codex-primary-window-minutes": "300",
+                  "x-codex-primary-reset-after-seconds": "120",
                 },
               }),
           ),

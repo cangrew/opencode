@@ -545,6 +545,73 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("keeps session cost and token totals in sync with assistant step settlement updates", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionMessageTable)
+        .values(assistantRow(SessionMessage.ID.make("msg_assistant_cost"), 0))
+        .run()
+        .pipe(Effect.orDie)
+
+      const service = yield* EventV2.Service
+      yield* service.publish(SessionEvent.Step.Ended, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(1),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant_cost"),
+        finish: "stop",
+        cost: 1.5,
+        tokens: { input: 10, output: 20, reasoning: 5, cache: { read: 3, write: 2 } },
+      })
+
+      let row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
+      expect(row).toMatchObject({
+        cost: 1.5,
+        tokens_input: 10,
+        tokens_output: 20,
+        tokens_reasoning: 5,
+        tokens_cache_read: 3,
+        tokens_cache_write: 2,
+      })
+
+      yield* service.publish(SessionEvent.Step.Ended, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(2),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant_cost"),
+        finish: "stop",
+        cost: 2.25,
+        tokens: { input: 7, output: 11, reasoning: 13, cache: { read: 17, write: 19 } },
+      })
+
+      row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
+      expect(row).toMatchObject({
+        cost: 2.25,
+        tokens_input: 7,
+        tokens_output: 11,
+        tokens_reasoning: 13,
+        tokens_cache_read: 17,
+        tokens_cache_write: 19,
+      })
+    }),
+  )
+
   it.effect("does not revive a stale incomplete assistant projection", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service

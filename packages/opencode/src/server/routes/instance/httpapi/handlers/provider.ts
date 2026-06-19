@@ -10,6 +10,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { ProviderAuthApiError } from "../groups/provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { SubscriptionUsage } from "@opencode-ai/core/subscription-usage"
 
 function mapProviderAuthError<A, R>(self: Effect.Effect<A, ProviderAuth.Error, R>) {
   return self.pipe(
@@ -36,6 +37,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
     const cfg = yield* Config.Service
     const provider = yield* Provider.Service
     const svc = yield* ProviderAuth.Service
+    const subscriptionUsage = yield* SubscriptionUsage.Service
 
     const list = Effect.fn("ProviderHttpApi.list")(function* () {
       const config = yield* cfg.get()
@@ -60,6 +62,18 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
 
     const auth = Effect.fn("ProviderHttpApi.auth")(function* () {
       return yield* svc.methods()
+    })
+
+    const subscriptionUsageList = Effect.fn("ProviderHttpApi.subscriptionUsageList")(function* () {
+      return yield* subscriptionUsage.list()
+    })
+
+    const subscriptionUsageGet = Effect.fn("ProviderHttpApi.subscriptionUsageGet")(function* (ctx: {
+      params: { providerID: ProviderV2.ID; accountID: SubscriptionUsage.AccountID }
+    }) {
+      return (
+        (yield* subscriptionUsage.get({ provider: ctx.params.providerID, accountID: ctx.params.accountID })) ?? null
+      )
     })
 
     const authorize = Effect.fn("ProviderHttpApi.authorize")(function* (ctx: {
@@ -107,6 +121,8 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
     return handlers
       .handle("list", list)
       .handle("auth", auth)
+      .handle("subscriptionUsageList", subscriptionUsageList)
+      .handle("subscriptionUsageGet", subscriptionUsageGet)
       .handleRaw("authorize", authorizeRaw)
       .handle("callback", callback)
   }),

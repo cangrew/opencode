@@ -8,6 +8,7 @@ import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { SubscriptionUsage } from "@opencode-ai/core/subscription-usage"
 
 const root = "/provider"
 
@@ -53,6 +54,27 @@ export const ProviderApi = HttpApi.make("provider")
             identifier: "provider.auth",
             summary: "Get provider auth methods",
             description: "Retrieve available authentication methods for all AI providers.",
+          }),
+        ),
+        HttpApiEndpoint.get("subscriptionUsageList", `${root}/subscription-usage`, {
+          query: WorkspaceRoutingQuery,
+          success: described(SubscriptionUsage.Info.pipe(Schema.Array), "Provider subscription usage snapshots"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "provider.subscription-usage.list",
+            summary: "List subscription usage",
+            description: "List the latest subscription usage snapshots captured for provider accounts.",
+          }),
+        ),
+        HttpApiEndpoint.get("subscriptionUsageGet", `${root}/subscription-usage/:providerID/:accountID`, {
+          params: { providerID: ProviderV2.ID, accountID: SubscriptionUsage.AccountID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.NullOr(SubscriptionUsage.Info), "Provider subscription usage snapshot"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "provider.subscription-usage.get",
+            summary: "Get subscription usage",
+            description: "Get the latest subscription usage snapshot for a provider account.",
           }),
         ),
         HttpApiEndpoint.post("authorize", `${root}/:providerID/oauth/authorize`, {

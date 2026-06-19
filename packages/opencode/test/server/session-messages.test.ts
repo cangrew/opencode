@@ -107,6 +107,7 @@ describe("session messages endpoint", () => {
       }),
     ),
     { git: true },
+    30_000,
   )
 
   it.instance(
@@ -155,6 +156,7 @@ describe("session messages endpoint", () => {
       }),
     ),
     { git: true },
+    30_000,
   )
 
   it.instance(

@@ -266,6 +266,37 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
+  it.effect("adds ChatGPT account headers for OpenAI OAuth credentials", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
+        undefined,
+        new Credential.Stored({
+          id: Credential.ID.create(),
+          integrationID: Integration.ID.make("openai"),
+          label: "default",
+          value: new Credential.OAuth({
+            type: "oauth",
+            methodID: Integration.MethodID.make("openai/browser"),
+            refresh: "refresh",
+            access: "access",
+            expires: Date.now() + 60_000,
+            metadata: { accountID: "acct_123" },
+          }),
+        }),
+      )
+
+      expect(resolved.route.defaults.headers).toMatchObject({
+        "x-test": "header",
+        "ChatGPT-Account-Id": "acct_123",
+      })
+      expect(resolved.route.defaults.http?.body).toMatchObject({
+        custom_extension: { enabled: true },
+        accountID: "acct_123",
+      })
+    }),
+  )
+
   it.effect("prefers stored credentials over configured auth", () =>
     Effect.gen(function* () {
       const credential = new Credential.Stored({

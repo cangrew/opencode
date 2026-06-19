@@ -9,6 +9,7 @@ import type {
   Message,
   Part,
   Provider,
+  SubscriptionUsageInfo,
   PermissionRequest,
   QuestionRequest,
   Session,
@@ -383,6 +384,7 @@ export type TuiState = {
     directory: string
   }
   readonly vcs: { branch?: string } | undefined
+  subscriptionUsage: () => ReadonlyArray<SubscriptionUsageInfo>
   session: {
     count: () => number
     get: (sessionID: string) => Session | undefined

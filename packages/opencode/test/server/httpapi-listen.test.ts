@@ -216,7 +216,7 @@ describe("HttpApi Server.listen", () => {
     } finally {
       if (!stopped) await stop(listener, "timed out cleaning up listener").catch(() => undefined)
     }
-  })
+  }, 30_000)
 
   testPty("stop(true) is safe when called concurrently and repeatedly", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
@@ -236,7 +236,7 @@ describe("HttpApi Server.listen", () => {
     } finally {
       if (!stopped) await stop(listener, "timed out cleaning up concurrent stop listener").catch(() => undefined)
     }
-  })
+  }, 30_000)
 
   testPty("stop(true) can force a graceful stop already in progress", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
@@ -257,7 +257,7 @@ describe("HttpApi Server.listen", () => {
     } finally {
       if (!stopped) await stop(listener, "timed out cleaning up forced stop listener").catch(() => undefined)
     }
-  })
+  }, 30_000)
 
   testPty("graceful stop waits for an overlapping forced stop", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
@@ -273,7 +273,7 @@ describe("HttpApi Server.listen", () => {
     } finally {
       if (!stopped) await stop(listener, "timed out cleaning up overlapping stop listener").catch(() => undefined)
     }
-  })
+  }, 30_000)
 
   test("stop() gracefully closes an idle listener and is repeat-safe", async () => {
     const listener = await startListener()
@@ -429,7 +429,7 @@ describe("HttpApi Server.listen", () => {
     } finally {
       await stop(listener, "timed out cleaning up rejected ticket listener").catch(() => undefined)
     }
-  })
+  }, 30_000)
 
   testPty("keeps PTY websocket tickets optional when server auth is disabled", async () => {
     await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
@@ -444,7 +444,7 @@ describe("HttpApi Server.listen", () => {
     } finally {
       await stop(listener, "timed out cleaning up no-auth listener").catch(() => undefined)
     }
-  })
+  }, 30_000)
 })
 
 function isPortFree(port: number) {

@@ -26,6 +26,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SubscriptionUsage } from "@opencode-ai/core/subscription-usage"
 import { SessionContextEpoch } from "@opencode-ai/core/session/context-epoch"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
 import { SessionRunner } from "@opencode-ai/core/session/runner"
@@ -247,6 +248,7 @@ const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(skillGuidance),
   Layer.provide(referenceGuidance),
   Layer.provide(config),
+  Layer.provide(SubscriptionUsage.defaultLayer),
 )
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
@@ -704,7 +706,7 @@ describe("SessionRunnerLLM", () => {
       yield* events.publish(SessionEvent.Moved, {
         sessionID,
         timestamp: DateTime.makeUnsafe(1),
-        location: { directory: AbsolutePath.make("/moved") },
+        location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
       })
       expect(
         yield* db
@@ -762,7 +764,7 @@ describe("SessionRunnerLLM", () => {
           .publish(SessionEvent.Moved, {
             sessionID,
             timestamp: DateTime.makeUnsafe(1),
-            location: { directory: AbsolutePath.make("/moved") },
+            location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
           })
           .pipe(Effect.asVoid)
       })

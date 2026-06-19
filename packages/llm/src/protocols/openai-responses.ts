@@ -19,6 +19,7 @@ import {
 } from "../schema"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 import { isContextOverflow } from "../provider-error"
+import { SubscriptionUsage } from "../subscription-usage"
 import { OpenAIOptions } from "./utils/openai-options"
 import { Lifecycle } from "./utils/lifecycle"
 import { ToolStream } from "./utils/tool-stream"
@@ -220,6 +221,7 @@ const OpenAIResponsesEvent = Schema.Struct({
         incomplete_details: optionalNull(Schema.Struct({ reason: Schema.String })),
         usage: optionalNull(OpenAIResponsesUsage),
         error: optionalNull(OpenAIResponsesErrorPayload),
+        rate_limits: optionalNull(Schema.Record(Schema.String, Schema.Unknown)),
       }),
       [Schema.Record(Schema.String, Schema.Unknown)],
     ),
@@ -235,6 +237,7 @@ interface ParserState {
   readonly hasFunctionCall: boolean
   readonly lifecycle: Lifecycle.State
   readonly reasoningItems: Readonly<Record<string, ReasoningStreamItem>>
+  readonly subscriptionUsage: SubscriptionUsage.Snapshot | undefined
   readonly store: boolean | undefined
 }
 
@@ -247,6 +250,8 @@ interface ReasoningStreamItem {
   // and matches the wire field.
   readonly summaryParts: Readonly<Record<number, ReasoningSummaryStatus>>
 }
+
+const openaiMetadata = (metadata: Record<string, unknown>): ProviderMetadata => ({ openai: metadata })
 
 const invalid = ProviderShared.invalidRequest
 
@@ -511,8 +516,6 @@ const mapFinishReason = (event: OpenAIResponsesEvent, hasFunctionCall: boolean):
   if (reason === "content_filter") return "content-filter"
   return hasFunctionCall ? "tool-calls" : "unknown"
 }
-
-const openaiMetadata = (metadata: Record<string, unknown>): ProviderMetadata => ({ openai: metadata })
 
 // Hosted tool items (provider-executed) ship their typed input + status +
 // result fields all in one item. We expose them as a `tool-call` +
@@ -858,16 +861,18 @@ const onOutputItemDone = Effect.fn("OpenAIResponses.onOutputItemDone")(function*
 
 const onResponseFinish = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
   const events: LLMEvent[] = []
+  const subscriptionUsage = SubscriptionUsage.merge(
+    state.subscriptionUsage,
+    SubscriptionUsage.fromRateLimits(event.response?.rate_limits),
+  )
   const lifecycle = Lifecycle.finish(state.lifecycle, events, {
     reason: mapFinishReason(event, state.hasFunctionCall),
     usage: mapUsage(event.response?.usage),
-    providerMetadata:
-      event.response?.id || event.response?.service_tier
-        ? openaiMetadata({
-            responseId: event.response.id,
-            serviceTier: event.response.service_tier,
-          })
-        : undefined,
+    providerMetadata: SubscriptionUsage.providerMetadata({
+      responseId: event.response?.id,
+      serviceTier: event.response?.service_tier,
+      subscriptionUsage,
+    }),
   })
   return [{ ...state, lifecycle }, events]
 }
@@ -891,6 +896,11 @@ const providerError = (event: OpenAIResponsesEvent, fallback: string) => {
   return LLMEvent.providerError({
     message,
     classification: code === "context_length_exceeded" || isContextOverflow(message) ? "context-overflow" : undefined,
+    providerMetadata: SubscriptionUsage.providerMetadata({
+      responseId: event.response?.id,
+      serviceTier: event.response?.service_tier,
+      subscriptionUsage: SubscriptionUsage.fromRateLimits(event.response?.rate_limits),
+    }),
   })
 }
 
@@ -948,12 +958,13 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: Protocol.jsonEvent(OpenAIResponsesEvent),
-    initial: (request) => ({
+    initial: (_request, response) => ({
       hasFunctionCall: false,
       tools: ToolStream.empty<string>(),
       lifecycle: Lifecycle.initial(),
       reasoningItems: {},
-      store: OpenAIOptions.store(request),
+      subscriptionUsage: SubscriptionUsage.fromHeaders(response?.headers ?? {}),
+      store: OpenAIOptions.store(_request),
     }),
     step,
     terminal: (event) => TERMINAL_TYPES.has(event.type),

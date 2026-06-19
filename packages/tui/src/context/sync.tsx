@@ -19,6 +19,7 @@ import type {
   VcsInfo,
   SnapshotFileDiff,
   ConsoleState,
+  SubscriptionUsageInfo,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useProject } from "./project"
@@ -98,6 +99,7 @@ export const {
       mcp_resource: {
         [key: string]: McpResource
       }
+      subscription_usage: SubscriptionUsageInfo[]
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
     }>({
@@ -125,9 +127,12 @@ export const {
       lsp: [],
       mcp: {},
       mcp_resource: {},
+      subscription_usage: [],
       formatter: [],
       vcs: undefined,
     })
+
+    const subscriptionUsageKey = (item: SubscriptionUsageInfo) => `${item.provider}:${item.accountID}`
 
     const event = useEvent()
     const project = useProject()
@@ -292,6 +297,22 @@ export const {
 
         case "session.status": {
           setStore("session_status", event.properties.sessionID, event.properties.status)
+          break
+        }
+
+        case "subscription-usage.updated": {
+          const usage = event.properties.usage
+          const result = search(store.subscription_usage, subscriptionUsageKey(usage), subscriptionUsageKey)
+          if (result.found) {
+            setStore("subscription_usage", result.index, reconcile(usage))
+            break
+          }
+          setStore(
+            "subscription_usage",
+            produce((draft) => {
+              draft.splice(result.index, 0, usage)
+            }),
+          )
           break
         }
 
@@ -499,6 +520,9 @@ export const {
               setStore("session_status", reconcile(x.data ?? {}))
             }),
             sdk.client.provider.auth({ workspace }).then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
+            sdk.client.provider.subscriptionUsage.list({ workspace }).then((x) => {
+              setStore("subscription_usage", reconcile(x.data ?? []))
+            }),
             sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
             project.workspace.sync(),
           ]).then(() => {

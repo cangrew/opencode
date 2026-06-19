@@ -10,6 +10,7 @@ import { WebSocketExecutor } from "./transport"
 import type { Protocol } from "./protocol"
 import { applyCachePolicy } from "../cache-policy"
 import * as ProviderShared from "../protocols/shared"
+import { SubscriptionUsage } from "../subscription-usage"
 import type { LLMError, LLMEvent, PreparedRequestOf, ProtocolID, ProviderOptions } from "../schema"
 import {
   GenerationOptions,
@@ -216,6 +217,32 @@ const streamError = (route: string, message: string, cause: Cause.Cause<unknown>
   return ProviderShared.eventError(route, message, Cause.pretty(cause))
 }
 
+const mergeProviderMetadata = (
+  left: Record<string, Record<string, unknown>> | undefined,
+  right: Record<string, Record<string, unknown>> | undefined,
+) => {
+  if (!left) return right
+  if (!right) return left
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)])
+  return Object.fromEntries(Array.from(keys, (key) => [key, { ...(left[key] ?? {}), ...(right[key] ?? {}) }]))
+}
+
+const withResponseHeaders = <Prepared>(prepared: Prepared, request: LLMRequest, event: LLMEvent): LLMEvent => {
+  if (!("providerMetadata" in event) || request.model.provider !== "openai") return event
+  const response =
+    typeof prepared === "object" && prepared !== null && "response" in prepared
+      ? (prepared.response as { readonly headers: Record<string, string> } | undefined)
+      : undefined
+  const providerMetadata = SubscriptionUsage.providerMetadata({
+    subscriptionUsage: SubscriptionUsage.fromHeaders(response?.headers ?? {}),
+  })
+  if (!providerMetadata) return event
+  return {
+    ...event,
+    providerMetadata: mergeProviderMetadata(event.providerMetadata, providerMetadata),
+  }
+}
+
 function makeFromTransport<Body, Prepared, Frame, Event, State>(
   input: MakeTransportInput<Body, Prepared, Frame, Event, State>,
 ): Route<Body, Prepared> {
@@ -271,6 +298,10 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
         }),
       streamPrepared: (prepared: Prepared, request: LLMRequest, runtime: TransportRuntime) => {
         const route = `${request.model.provider}/${request.model.route.id}`
+        const response =
+          typeof prepared === "object" && prepared !== null && "response" in prepared
+            ? (prepared.response as { readonly headers: Record<string, string> } | undefined)
+            : undefined
         const events = routeInput.transport
           .frames(prepared, request, runtime)
           .pipe(
@@ -279,10 +310,11 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           )
         return events.pipe(
           Stream.mapAccumEffect(
-            () => protocol.stream.initial(request),
+            () => protocol.stream.initial(request, response),
             protocol.stream.step,
             protocol.stream.onHalt ? { onHalt: protocol.stream.onHalt } : undefined,
           ),
+          Stream.map((event) => withResponseHeaders(prepared, request, event)),
           Stream.catchCause((cause) => Stream.fail(streamError(route, `Failed to read ${route} stream`, cause))),
         )
       },

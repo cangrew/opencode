@@ -42,6 +42,12 @@ function usage(part: (typeof SessionV1.Event.PartUpdated.Type)["data"]["part"] |
   return { cost: value.cost as Usage["cost"], tokens: value.tokens as Usage["tokens"] }
 }
 
+function assistantUsage(message: SessionMessage.Message | unknown): Usage | undefined {
+  if (!(message instanceof SessionMessage.Assistant)) return undefined
+  if (message.cost === undefined || message.tokens === undefined) return undefined
+  return { cost: message.cost, tokens: message.tokens }
+}
+
 function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInsert {
   return {
     id: info.id,
@@ -118,17 +124,34 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
       if (event.seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
       const encoded = encodeMessage(message)
       const { id, type, ...data } = encoded
-      return db
-        .update(SessionMessageTable)
-        .set({ type, time_created: DateTime.toEpochMillis(message.time.created), data })
-        .where(
-          and(
-            eq(SessionMessageTable.id, SessionMessage.ID.make(id)),
-            eq(SessionMessageTable.session_id, event.data.sessionID),
-          ),
-        )
-        .run()
-        .pipe(Effect.orDie)
+      return Effect.gen(function* () {
+        const row = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(
+            and(
+              eq(SessionMessageTable.id, SessionMessage.ID.make(id)),
+              eq(SessionMessageTable.session_id, event.data.sessionID),
+            ),
+          )
+          .get()
+          .pipe(Effect.orDie)
+        const previous = row ? assistantUsage(decodeRow(row)) : undefined
+        yield* db
+          .update(SessionMessageTable)
+          .set({ type, time_created: DateTime.toEpochMillis(message.time.created), data })
+          .where(
+            and(
+              eq(SessionMessageTable.id, SessionMessage.ID.make(id)),
+              eq(SessionMessageTable.session_id, event.data.sessionID),
+            ),
+          )
+          .run()
+          .pipe(Effect.orDie)
+        const next = assistantUsage(message)
+        if (previous) yield* applyUsage(db, event.data.sessionID, previous, -1)
+        if (next) yield* applyUsage(db, event.data.sessionID, next)
+      })
     }
     const appendMessage = (message: SessionMessage.Message) => insertMessage(db, event, message)
     const adapter: SessionMessageUpdater.Adapter = {

@@ -40,13 +40,20 @@ export type Error =
   | UnsupportedApiError
 
 export interface Interface {
+  readonly select: (session: SessionSchema.Info) => Effect.Effect<ModelV2.Info, Error>
   readonly resolve: (session: SessionSchema.Info) => Effect.Effect<Model, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRunnerModel") {}
 
 /** Test or embedding seam for supplying a model resolver directly. */
-export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Service, Service.of({ resolve }))
+export const layerWith = (
+  resolve: Interface["resolve"],
+  select: Interface["select"] = (session) =>
+    resolve(session).pipe(
+      Effect.map((model) => ModelV2.Info.empty(ProviderV2.ID.make(model.provider), ModelV2.ID.make(model.id))),
+    ),
+) => Layer.succeed(Service, Service.of({ resolve, select }))
 
 const apiKey = (model: ModelV2.Info, connection?: IntegrationConnection.Info, credential?: Credential.Stored) => {
   if (credential?.value.type === "key") return Auth.value(credential.value.key)
@@ -99,10 +106,17 @@ export const fromCatalogModel = (
         })
   const key = apiKey(resolved, connection, credential)
   if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/openai") {
+    const accountID = credential?.value.metadata?.accountID
+    const openai =
+      typeof accountID !== "string"
+        ? resolved
+        : produce(resolved, (draft) => {
+            draft.request.headers["ChatGPT-Account-Id"] = accountID
+          })
     return Effect.succeed(
-      withDefaults(resolved, OpenAIResponses.route)
+      withDefaults(openai, OpenAIResponses.route)
         .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
-        .model({ id: resolved.api.id }),
+        .model({ id: openai.api.id }),
     )
   }
   if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/anthropic") {
@@ -145,18 +159,22 @@ export const locationLayer = Layer.effect(
     const credentials = yield* Credential.Service
     const integrations = yield* Integration.Service
     const boot = yield* PluginBoot.Service
+    const select = Effect.fn("SessionRunnerModel.select")(function* (session: SessionSchema.Info) {
+      yield* boot.wait()
+      const selected = session.model
+        ? yield* catalog.model.get(session.model.providerID, session.model.id)
+        : (Option.getOrUndefined((yield* catalog.model.default()).pipe(Option.filter(supported))) ??
+          (yield* catalog.model.available()).find(supported))
+      if (!selected) return yield* new ModelNotSelectedError({ sessionID: session.id })
+      return withVariant(selected, session.model?.variant)
+    })
     return Service.of({
+      select,
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session) {
-        // Location plugins populate and filter the catalog asynchronously during layer startup.
-        yield* boot.wait()
-        const selected = session.model
-          ? yield* catalog.model.get(session.model.providerID, session.model.id)
-          : (Option.getOrUndefined((yield* catalog.model.default()).pipe(Option.filter(supported))) ??
-            (yield* catalog.model.available()).find(supported))
-        if (!selected) return yield* new ModelNotSelectedError({ sessionID: session.id })
+        const selected = yield* select(session)
         const connection = yield* integrations.connection.forIntegration(Integration.ID.make(selected.providerID))
         return yield* fromCatalogModel(
-          withVariant(selected, session.model?.variant),
+          selected,
           connection,
           connection?.type === "credential" ? yield* credentials.get(connection.id) : undefined,
         )
