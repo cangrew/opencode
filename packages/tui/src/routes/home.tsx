@@ -1,6 +1,8 @@
 import { Prompt, type PromptRef } from "../component/prompt"
-import { createEffect, createMemo, createSignal, onMount } from "solid-js"
+import { Show, createEffect, createMemo, createSignal, onMount } from "solid-js"
 import { Logo } from "../component/logo"
+import { GehennaTuiLogo } from "../component/gehenna-logo"
+import { useTheme } from "../context/theme"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
 import { useArgs } from "../context/args"
@@ -22,6 +24,11 @@ const placeholder = {
 export function Home() {
   const pluginRuntime = usePluginRuntime()
   const sync = useSync()
+  const themeCtx = useTheme()
+  const isGehenna = createMemo(() => {
+    const id = themeCtx.selected
+    return id === "gehenna" || id === "gehenna-dim"
+  })
   const route = useRouteData("home")
   const promptRef = usePromptRef()
   const [ref, setRef] = createSignal<PromptRef | undefined>()
@@ -74,7 +81,9 @@ export function Home() {
         <box height={4} minHeight={0} flexShrink={1} />
         <box flexShrink={0}>
           <pluginRuntime.Slot name="home_logo" mode="replace">
-            <Logo />
+            <Show when={isGehenna()} fallback={<Logo />}>
+              <GehennaTuiLogo />
+            </Show>
           </pluginRuntime.Slot>
         </box>
         <box height={1} minHeight={0} flexShrink={1} />

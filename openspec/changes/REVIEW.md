@@ -9,6 +9,7 @@ Review Tracking", for the full workflow.
 
 | change | review | updated | notes |
 |---|---|---|---|
+| add-gehenna-theme | addressed | 2026-06-18 | Gehenna terminal-board theme (Talos Principle BBS); 2 bg siblings (gehenna, gehenna-dim), extended ANSI palette + themed new-chat wordmark (TUI + web); reviewed (CodeRabbit clean, 2 Codex P2 fixed), implemented and verified |
 | subscription-usage-tracker | open | 2026-06-18 | initial tracker bootstrap |
 | context-safety-net | changes-requested | 2026-06-18 | X2: added "Compaction pipeline order" requirement; message-unit and retry-cap gaps remain (MEDIUM) |
 | sliding-window-compaction | changes-requested | 2026-06-18 | SW1: cut keeps tool-call/result pairs together; SW2: MIN defined, trim oldest |
