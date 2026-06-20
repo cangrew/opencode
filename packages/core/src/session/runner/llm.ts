@@ -12,6 +12,7 @@ import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
+import { HybridSettings } from "../../hybrid"
 import { Location } from "../../location"
 import { ModelV2 } from "../../model"
 import { ProviderV2 } from "../../provider"
@@ -102,7 +103,23 @@ export const layer = Layer.effect(
     const referenceGuidance = yield* ReferenceGuidance.Service
     const config = yield* Config.Service
     const db = (yield* Database.Service).db
-    const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
+    const configEntries = yield* config.entries()
+    const hybridSettings = HybridSettings.resolve(configEntries)
+    const resolveCheap = () =>
+      hybridSettings.cheapModel
+        ? models
+            .resolveRef(hybridSettings.cheapModel)
+            .pipe(
+              Effect.catch(() => Effect.succeed(undefined)),
+              Effect.catchDefect(() => Effect.succeed(undefined)),
+            )
+        : Effect.succeed(undefined)
+    const compaction = SessionCompaction.make({
+      events,
+      llm,
+      config: configEntries,
+      hybrid: { settings: hybridSettings, resolveCheap },
+    })
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)

@@ -87,6 +87,23 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("preserves hybrid settings when migrating v1-shaped configuration", () =>
+    Effect.sync(() => {
+      expect(
+        ConfigMigrateV1.migrate({
+          snapshot: false,
+          hybrid: {
+            enabled: true,
+            cheap_model: { providerID: "anthropic", modelID: "claude-haiku" },
+          },
+        }).hybrid,
+      ).toEqual({
+        enabled: true,
+        cheap_model: { providerID: "anthropic", modelID: "claude-haiku" },
+      })
+    }),
+  )
+
   it.effect("migrates v1 provider setup options into AISDK settings", () =>
     Effect.sync(() => {
       const migrated = ConfigMigrateV1.migrate({

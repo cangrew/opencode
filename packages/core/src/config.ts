@@ -15,6 +15,7 @@ import { ConfigCompaction } from "./config/compaction"
 import { ConfigCommand } from "./config/command"
 import { ConfigExperimental } from "./config/experimental"
 import { ConfigFormatter } from "./config/formatter"
+import { ConfigHybrid } from "./config/hybrid"
 import { ConfigLSP } from "./config/lsp"
 import { ConfigMCP } from "./config/mcp"
 import { ConfigPlugin } from "./config/plugin"
@@ -102,6 +103,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
     description: "Ordered external plugin packages to load",
   }),
   experimental: ConfigExperimental.Experimental.pipe(Schema.optional),
+  hybrid: ConfigHybrid.Info.pipe(Schema.optional).annotate({
+    description: "Hybrid model routing and tool-output compression (opt-in, default off)",
+  }),
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(Schema.optional),
 }) {}
 

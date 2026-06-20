@@ -39,14 +39,34 @@ export type Error =
   | ModelNotSelectedError
   | UnsupportedApiError
 
+export interface Ref {
+  readonly providerID: string
+  readonly modelID: string
+  readonly variant?: ModelV2.VariantID
+}
+
 export interface Interface {
   readonly resolve: (session: SessionSchema.Info) => Effect.Effect<Model, Error>
+  readonly resolveRef: (ref: Ref) => Effect.Effect<Model, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRunnerModel") {}
 
-/** Test or embedding seam for supplying a model resolver directly. */
-export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Service, Service.of({ resolve }))
+export const layerWith = (resolve: Interface["resolve"], resolveRef?: Interface["resolveRef"]) =>
+  Layer.succeed(
+    Service,
+    Service.of({
+      resolve,
+      resolveRef:
+        resolveRef ??
+        ((ref) =>
+          new UnsupportedApiError({
+            providerID: ProviderV2.ID.make(ref.providerID),
+            modelID: ModelV2.ID.make(ref.modelID),
+            api: "resolveRef not supported in this seam",
+          })),
+    }),
+  )
 
 const apiKey = (model: ModelV2.Info, connection?: IntegrationConnection.Info, credential?: Credential.Stored) => {
   if (credential?.value.type === "key") return Auth.value(credential.value.key)
@@ -145,6 +165,17 @@ export const locationLayer = Layer.effect(
     const credentials = yield* Credential.Service
     const integrations = yield* Integration.Service
     const boot = yield* PluginBoot.Service
+    const resolveSelected = Effect.fn("SessionRunnerModel.resolveSelected")(function* (
+      selected: ModelV2.Info,
+      variant: ModelV2.VariantID | undefined,
+    ) {
+      const connection = yield* integrations.connection.forIntegration(Integration.ID.make(selected.providerID))
+      return yield* fromCatalogModel(
+        withVariant(selected, variant),
+        connection,
+        connection?.type === "credential" ? yield* credentials.get(connection.id) : undefined,
+      )
+    })
     return Service.of({
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session) {
         // Location plugins populate and filter the catalog asynchronously during layer startup.
@@ -154,12 +185,12 @@ export const locationLayer = Layer.effect(
           : (Option.getOrUndefined((yield* catalog.model.default()).pipe(Option.filter(supported))) ??
             (yield* catalog.model.available()).find(supported))
         if (!selected) return yield* new ModelNotSelectedError({ sessionID: session.id })
-        const connection = yield* integrations.connection.forIntegration(Integration.ID.make(selected.providerID))
-        return yield* fromCatalogModel(
-          withVariant(selected, session.model?.variant),
-          connection,
-          connection?.type === "credential" ? yield* credentials.get(connection.id) : undefined,
-        )
+        return yield* resolveSelected(selected, session.model?.variant)
+      }),
+      resolveRef: Effect.fn("SessionRunnerModel.resolveRef")(function* (ref) {
+        yield* boot.wait()
+        const selected = yield* catalog.model.get(ProviderV2.ID.make(ref.providerID), ModelV2.ID.make(ref.modelID))
+        return yield* resolveSelected(selected, ref.variant)
       }),
     })
   }),

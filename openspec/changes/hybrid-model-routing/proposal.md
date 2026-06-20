@@ -6,12 +6,18 @@ Lightweight, well-bounded tasks (session title generation, compaction/summarizat
 
 ## What Changes
 
-- Add an opt-in `hybrid` config block (default off) with `cheap_model`, compression timeout/token/tail settings, and routing logging.
-- Route lightweight task types (title generation, compaction/summarization, "complete" calls, webfetch/websearch result processing) to the configured `cheap_model` when hybrid is enabled and a `cheap_model` is set.
-- Add a tool-output compression pass that pre-compresses large tool outputs (grep/glob/bash/read above a line-count threshold) via the cheap model using auto-selected EXTRACT / SUMMARIZE / FILTER templates before the output reaches the main model.
-- Always preserve the last N lines of the original output verbatim as an anti-hallucination anchor.
-- Silently fall back to the raw, uncompressed output on any compression error or timeout, so results are never corrupted.
+- Add an opt-in `hybrid` config block (default off) with `cheap_model`, a compression line-count threshold, compression timeout/token/tail settings, and routing logging.
+- Add a cheap-model resolver and a pure `resolveModel(taskType)` selector that routes lightweight task types to the configured `cheap_model` when hybrid is enabled and a `cheap_model` resolves, else falls back silently to the main model.
+- Route compaction/summarization (the only lightweight LLM call site that exists in the current V2 port) through `resolveModel`. The selector already enumerates `title`, `complete`, `webfetch`, and `websearch` so those wire in as one-liners once their call sites exist (see Deferred scope).
+- Add a self-contained tool-output compression engine that compresses large tool outputs (grep/glob/bash/read above a line-count threshold) via the cheap model using auto-selected EXTRACT / SUMMARIZE / FILTER templates, preserves the last N lines verbatim as an anti-hallucination anchor, bounds the call by timeout/max-tokens, and silently falls back to raw output on any error, timeout, or empty/invalid result.
 - This is opt-in and default-off. No **BREAKING** changes: when `hybrid.enabled` is false or `cheap_model` is missing, behavior is identical to today.
+
+### Deferred scope (not delivered by this change yet)
+
+The following are out of scope until their dependencies land, because the call sites or pipeline they target do not exist in the current V2 port (see `design.md` "Call-site audit"):
+
+- Routing for title generation, "complete" calls, and webfetch/websearch result processing: none of these perform an LLM call in current V2.
+- The live tool-runtime compression hook: the tool-output pipeline ordering is owned by the unmerged `context-safety-net` change. The compression engine is built call-ready; only the thin wiring step is deferred.
 
 ## Capabilities
 
@@ -26,7 +32,7 @@ None — opt-in feature, default off.
 
 ## Impact
 
-- **Packages**: `packages/core` (config schema, session compaction/title routing, tool runtime compression hook, webfetch/websearch result handling), `packages/llm` (cheap-model resolution and request routing on the LLM call path), `packages/opencode` (config reference/docs surfacing).
-- **Config**: new `hybrid` block: `hybrid.enabled` (default `false`), `hybrid.cheap_model` (`{ providerID, modelID }`), `hybrid.compression_timeout_ms` (default `5000`), `hybrid.compression_max_tokens` (default `1024`), `hybrid.compression_tail_lines` (default `3`), `hybrid.log_routing` (default `false`).
+- **Packages**: `packages/core` (config schema, the `hybrid` resolver/selector module, session compaction routing, the compression engine and its tests), plus docs. The cheap-model resolver reuses the existing catalog/credential lookup in `SessionRunnerModel`, so no `packages/llm` change is required for this slice. The live tool-runtime compression hook is deferred.
+- **Config**: new `hybrid` block: `hybrid.enabled` (default `false`), `hybrid.cheap_model` (`{ providerID, modelID }`), `hybrid.compression_threshold_lines` (default `40`), `hybrid.compression_timeout_ms` (default `5000`), `hybrid.compression_max_tokens` (default `1024`), `hybrid.compression_tail_lines` (default `3`), `hybrid.log_routing` (default `false`).
 - **Providers**: the configured `cheap_model` provider must be installed/authenticated like any other provider; no new provider integrations are required.
 - **Runtime**: an extra cheap-model call per routed task and per compressed tool output, bounded by `compression_timeout_ms` with silent fallback so the main path is never blocked or corrupted.
