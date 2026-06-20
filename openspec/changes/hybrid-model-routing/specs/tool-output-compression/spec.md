@@ -1,5 +1,15 @@
 # tool-output-compression
 
+> Delivery note (2026-06-19): this change implements the compression ENGINE
+> that satisfies these requirements (enable gate, threshold gate, template
+> selection, tail preservation, bounded call, silent fallback), fully unit- and
+> integration-tested against a stubbed cheap model. The live hook that runs the
+> engine inside the tool runtime "before the output reaches the main model" is
+> DEFERRED until the `context-safety-net` change lands the canonical tool-output
+> pipeline order and the seam threads the tool name (see `design.md`). The
+> behavioral contract below is met by the engine; only the runtime placement is
+> deferred.
+
 ## ADDED Requirements
 
 ### Requirement: Compression Enable Gate

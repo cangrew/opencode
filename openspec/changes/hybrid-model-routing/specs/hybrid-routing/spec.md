@@ -1,5 +1,13 @@
 # hybrid-routing
 
+> Delivery note (2026-06-19): this change implements the enable gate, the
+> `resolveModel` selector, compaction routing, routing logging, and main-model
+> preservation. The title / complete / webfetch / websearch routing
+> requirements are part of the capability contract but are DEFERRED because no
+> such LLM call site exists in the current V2 port (see `design.md`
+> "Call-site audit"). They are listed under "Deferred Requirements" below and
+> are not satisfied by this change.
+
 ## ADDED Requirements
 
 ### Requirement: Hybrid Routing Enable Gate
@@ -21,15 +29,6 @@ The system SHALL route lightweight tasks to the cheap model ONLY when `hybrid.en
 - **WHEN** `hybrid.enabled` is `true` and `hybrid.cheap_model` resolves successfully
 - **THEN** lightweight tasks are dispatched to the cheap model
 
-### Requirement: Session Title Routing
-
-When hybrid routing is active, session title generation SHALL be dispatched to the configured cheap model instead of the main model.
-
-#### Scenario: Title generation routes to cheap model
-
-- **WHEN** hybrid routing is active and a session title is generated
-- **THEN** the title request is sent to the cheap model and the resulting title is stored unchanged
-
 ### Requirement: Compaction and Summarization Routing
 
 When hybrid routing is active, compaction and summarization calls SHALL be dispatched to the configured cheap model.
@@ -38,29 +37,6 @@ When hybrid routing is active, compaction and summarization calls SHALL be dispa
 
 - **WHEN** hybrid routing is active and a compaction/summarization pass runs
 - **THEN** the summarization request is sent to the cheap model and the produced summary is used as the compacted context
-
-### Requirement: Complete Call Routing
-
-When hybrid routing is active, lightweight "complete" calls SHALL be dispatched to the configured cheap model.
-
-#### Scenario: Complete call routes to cheap model
-
-- **WHEN** hybrid routing is active and a "complete" call is issued
-- **THEN** the completion request is sent to the cheap model
-
-### Requirement: Webfetch and Websearch Result Processing Routing
-
-When hybrid routing is active, post-processing of webfetch and websearch results SHALL be dispatched to the configured cheap model.
-
-#### Scenario: Webfetch result processing routes to cheap model
-
-- **WHEN** hybrid routing is active and a webfetch result is processed (extraction/summarization of fetched content)
-- **THEN** the processing request is sent to the cheap model
-
-#### Scenario: Websearch result processing routes to cheap model
-
-- **WHEN** hybrid routing is active and a websearch result is processed
-- **THEN** the processing request is sent to the cheap model
 
 ### Requirement: Routing Decision Logging
 
@@ -84,3 +60,42 @@ The system SHALL route only the enumerated lightweight task types (title, compac
 
 - **WHEN** hybrid routing is active and a primary assistant turn (user-facing reasoning or tool calls) runs
 - **THEN** the turn executes on the main model, not the cheap model
+
+## Deferred Requirements
+
+> These are part of the `hybrid-routing` capability contract but are NOT
+> satisfied by this change: the V2 port has no LLM call site for them yet. The
+> `resolveModel` selector already enumerates these task types, so each becomes a
+> one-line wiring once its call site exists.
+
+### Requirement: Session Title Routing
+
+When hybrid routing is active, session title generation SHALL be dispatched to the configured cheap model instead of the main model.
+
+#### Scenario: Title generation routes to cheap model
+
+- **WHEN** hybrid routing is active and a session title is generated
+- **THEN** the title request is sent to the cheap model and the resulting title is stored unchanged
+
+### Requirement: Complete Call Routing
+
+When hybrid routing is active, lightweight "complete" calls SHALL be dispatched to the configured cheap model.
+
+#### Scenario: Complete call routes to cheap model
+
+- **WHEN** hybrid routing is active and a "complete" call is issued
+- **THEN** the completion request is sent to the cheap model
+
+### Requirement: Webfetch and Websearch Result Processing Routing
+
+When hybrid routing is active, post-processing of webfetch and websearch results SHALL be dispatched to the configured cheap model.
+
+#### Scenario: Webfetch result processing routes to cheap model
+
+- **WHEN** hybrid routing is active and a webfetch result is processed (extraction/summarization of fetched content)
+- **THEN** the processing request is sent to the cheap model
+
+#### Scenario: Websearch result processing routes to cheap model
+
+- **WHEN** hybrid routing is active and a websearch result is processed
+- **THEN** the processing request is sent to the cheap model

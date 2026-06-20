@@ -4,6 +4,8 @@ import { LLM, LLMError, LLMEvent, Message, type LLMRequest, type Model } from "@
 import { DateTime, Effect, Stream } from "effect"
 import type { Config } from "../config"
 import type { EventV2 } from "../event"
+import { HybridRouting } from "../hybrid"
+import type { HybridSettings } from "../hybrid"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
@@ -67,6 +69,10 @@ type Dependencies = {
     readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
   }
   readonly config: readonly Config.Entry[]
+  readonly hybrid?: {
+    readonly settings: HybridSettings.Info
+    readonly resolveCheap: () => Effect.Effect<Model | undefined>
+  }
 }
 
 type Input = {
@@ -77,6 +83,14 @@ type Input = {
 }
 
 const estimate = (value: unknown) => Token.estimate(JSON.stringify(value))
+
+// A catalog model may report an output limit of 0 when none is configured
+// (ModelV2.Info.empty default). Treat that as unspecified and fall back to the
+// summary cap so generation never requests maxTokens: 0.
+const summaryOutputCap = (model: Model) => {
+  const output = model.route.defaults.limits?.output
+  return Math.min(output && output > 0 ? output : SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
+}
 
 const truncate = (value: string) =>
   value.length <= TOOL_OUTPUT_MAX_CHARS ? value : `${value.slice(0, TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`
@@ -175,9 +189,6 @@ export const buildPrompt = (input: { readonly previousSummary?: string; readonly
 export const make = (dependencies: Dependencies) => {
   const config = settings(dependencies.config)
   const compactAfterOverflow = Effect.fn("SessionCompaction.compactAfterOverflow")(function* (input: Input) {
-    const context = input.model.route.defaults.limits?.context
-    if (context === undefined || context <= 0) return false
-    const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
     const selected = select(input.entries, config.tokens)
     const previousSummary = input.entries.find((entry) => entry.message.type === "compaction")?.message
     if (!selected || (selected.head.length === 0 && previousSummary?.type !== "compaction")) return false
@@ -185,8 +196,27 @@ export const make = (dependencies: Dependencies) => {
       previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
       context: [previousSummary?.type === "compaction" ? previousSummary.recent : "", selected.head].filter(Boolean),
     })
-    const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
-    if (Token.estimate(summaryPrompt) > context - summaryOutput) return false
+    const hybrid = dependencies.hybrid
+    const cheap = hybrid?.settings.enabled ? yield* hybrid.resolveCheap() : undefined
+    const routedModel = hybrid
+      ? HybridRouting.resolveModel("compaction", { main: input.model, cheap, settings: hybrid.settings })
+      : input.model
+    const promptTokens = Token.estimate(summaryPrompt)
+    const routedOutput = summaryOutputCap(routedModel)
+    const routedContext = routedModel.route.defaults.limits?.context
+    const fallbackOutput = summaryOutputCap(input.model)
+    const fallbackContext = input.model.route.defaults.limits?.context
+    const summaryModel =
+      routedContext !== undefined && routedContext > 0 && promptTokens <= routedContext - routedOutput
+        ? routedModel
+        : routedModel === input.model ||
+            fallbackContext === undefined ||
+            fallbackContext <= 0 ||
+            promptTokens > fallbackContext - fallbackOutput
+          ? undefined
+          : input.model
+    if (!summaryModel) return false
+    const summaryOutput = summaryModel === routedModel ? routedOutput : fallbackOutput
     const messageID = SessionMessage.ID.create()
     yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
       sessionID: input.sessionID,
@@ -195,12 +225,21 @@ export const make = (dependencies: Dependencies) => {
       reason: "auto",
     })
 
+    if (hybrid?.settings.logRouting)
+      yield* Effect.logDebug(
+        HybridRouting.describe(
+          "compaction",
+          summaryModel === cheap ? "cheap" : "main",
+          summaryModel,
+        ),
+      )
+
     const chunks: string[] = []
     let failed = false
     const summarized = yield* dependencies.llm
       .stream(
         LLM.request({
-          model: input.model,
+          model: summaryModel,
           messages: [Message.user(summaryPrompt)],
           tools: [],
           generation: { maxTokens: summaryOutput },

@@ -19,4 +19,4 @@ Review Tracking", for the full workflow.
 | orchestration-guardrails | changes-requested | 2026-06-18 | OG1: doom-loop cap = 1000 calls/root; OG3: descendant cap now concurrent |
 | agent-memory | changes-requested | 2026-06-18 | AM1: enforced agent-scope seam for subagent exclusion; decay/relevance/caps remain (MEDIUM) |
 | goal-system | changes-requested | 2026-06-18 | GS1: state machine completed with manual pause/resume and budget_limited resume path |
-| hybrid-model-routing | changes-requested | 2026-06-18 | HM2/HM4 (MEDIUM): compression determinism + tool-output pipeline ordering noted in design |
+| hybrid-model-routing | addressed | 2026-06-19 | HM2 (determinism: pure engine + memoized live hook) + HM4 (pipeline order: compress→Tier1→bound) resolved; scope revised to V2 reality (compaction routing + compression engine now; title/complete/webfetch/websearch routing + live runtime hook deferred to absent call sites / unmerged context-safety-net) |

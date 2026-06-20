@@ -741,6 +741,39 @@ You can control context compaction behavior through the `compaction` option.
 
 ---
 
+### Hybrid model routing
+
+The `hybrid` option lets lightweight, well-bounded work run on a cheaper model and (when wired) pre-compresses large, low-density tool outputs before they reach the main model. It is **opt-in and off by default**: when `enabled` is `false` or `cheap_model` does not resolve, behavior is identical to today.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "hybrid": {
+    "enabled": true,
+    "cheap_model": { "providerID": "anthropic", "modelID": "claude-haiku-4-5-20251001" },
+    "compression_threshold_lines": 40,
+    "compression_timeout_ms": 5000,
+    "compression_max_tokens": 1024,
+    "compression_tail_lines": 3,
+    "log_routing": false
+  }
+}
+```
+
+- `enabled` - Turn hybrid routing and tool-output compression on (default: `false`).
+- `cheap_model` - The `{ providerID, modelID }` lightweight tasks route to. Its provider must be installed and authenticated like any other. If it does not resolve, routing and compression silently fall back to the main model / raw output.
+- `compression_threshold_lines` - Only tool outputs above this line count are compressed (default: `40`). Smaller outputs pass through verbatim.
+- `compression_timeout_ms` - Abandon a compression call after this many milliseconds and use the raw output (default: `5000`).
+- `compression_max_tokens` - Cap the compression response size (default: `1024`).
+- `compression_tail_lines` - Always append the last N original lines verbatim after the compressed body as an anti-hallucination anchor (default: `3`).
+- `log_routing` - Log each routing/compression decision for diagnostics (default: `false`).
+
+Only a fixed set of lightweight task types is ever routed to the cheap model (currently compaction/summarization; title, "complete", and webfetch/websearch result processing wire in as those call sites land). Primary reasoning and tool-driving turns always stay on the main model.
+
+**Compression accuracy trade-off.** Compressing tool output is lossy: it can reduce accuracy and raise hallucination on precise or multi-hop reasoning. Compression is therefore gated to large, low-density outputs only, prefers verbatim extraction/filtering over paraphrase for code, preserves the tail lines verbatim, and never runs on the precise-reasoning path. On any error, timeout, or empty result it silently returns the raw output, so results are never corrupted. The live tool-runtime compression hook is not enabled yet (it lands with the tool-output pipeline work); routing for the non-compaction task types is similarly staged.
+
+---
+
 ### Watcher
 
 You can configure file watcher ignore patterns through the `watcher` option.
