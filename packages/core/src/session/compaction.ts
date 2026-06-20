@@ -84,6 +84,14 @@ type Input = {
 
 const estimate = (value: unknown) => Token.estimate(JSON.stringify(value))
 
+// A catalog model may report an output limit of 0 when none is configured
+// (ModelV2.Info.empty default). Treat that as unspecified and fall back to the
+// summary cap so generation never requests maxTokens: 0.
+const summaryOutputCap = (model: Model) => {
+  const output = model.route.defaults.limits?.output
+  return Math.min(output && output > 0 ? output : SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
+}
+
 const truncate = (value: string) =>
   value.length <= TOOL_OUTPUT_MAX_CHARS ? value : `${value.slice(0, TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`
 
@@ -194,9 +202,9 @@ export const make = (dependencies: Dependencies) => {
       ? HybridRouting.resolveModel("compaction", { main: input.model, cheap, settings: hybrid.settings })
       : input.model
     const promptTokens = Token.estimate(summaryPrompt)
-    const routedOutput = Math.min(routedModel.route.defaults.limits?.output ?? SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
+    const routedOutput = summaryOutputCap(routedModel)
     const routedContext = routedModel.route.defaults.limits?.context
-    const fallbackOutput = Math.min(input.model.route.defaults.limits?.output ?? SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
+    const fallbackOutput = summaryOutputCap(input.model)
     const fallbackContext = input.model.route.defaults.limits?.context
     const summaryModel =
       routedContext !== undefined && routedContext > 0 && promptTokens <= routedContext - routedOutput

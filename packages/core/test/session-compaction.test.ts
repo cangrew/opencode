@@ -43,6 +43,26 @@ test("compaction caps summary output to routed cheap model limits", async () => 
   expect(requests[0]?.generation?.maxTokens).toBe(128)
 })
 
+test("compaction uses the default summary cap when the routed model omits an output limit", async () => {
+  const requests: LLMRequest[] = []
+  const compaction = SessionCompaction.make({
+    events,
+    config: config(),
+    hybrid: { settings: settings(), resolveCheap: () => Effect.succeed(model("cheap", 10_000, 0)) },
+    llm: {
+      stream: (request) => {
+        requests.push(request)
+        return Stream.fromIterable([LLMEvent.textDelta({ id: "summary", text: "summary" })])
+      },
+    },
+  })
+
+  await Effect.runPromise(compaction.compactAfterOverflow(input()))
+
+  expect(String(requests[0]?.model.id)).toBe("cheap")
+  expect(requests[0]?.generation?.maxTokens).toBe(4_096)
+})
+
 test("compaction falls back to main model when cheap context is too small", async () => {
   const requests: LLMRequest[] = []
   const compaction = SessionCompaction.make({
