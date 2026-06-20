@@ -41,6 +41,9 @@ export const compress = (input: Input, compressor: Compressor): Effect.Effect<st
     if (trimmed.length === 0) return input.output
     return assemble(trimmed, input.output, input.settings.compressionTailLines)
   }).pipe(
+    // Compress within a bounded timeout; on any failure (timeout, error, empty/invalid
+    // result) silently fall back to the raw output. Compression must never corrupt,
+    // truncate, or block the main path, so it always resolves to a usable string.
     Effect.timeoutOrElse({
       duration: Duration.millis(input.settings.compressionTimeoutMs),
       orElse: () => Effect.succeed(input.output),
