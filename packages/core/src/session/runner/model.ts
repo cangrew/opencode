@@ -60,11 +60,13 @@ export const layerWith = (resolve: Interface["resolve"], resolveRef?: Interface[
       resolveRef:
         resolveRef ??
         ((ref) =>
-          new UnsupportedApiError({
-            providerID: ProviderV2.ID.make(ref.providerID),
-            modelID: ModelV2.ID.make(ref.modelID),
-            api: "resolveRef not supported in this seam",
-          })),
+          Effect.fail(
+            new UnsupportedApiError({
+              providerID: ProviderV2.ID.make(ref.providerID),
+              modelID: ModelV2.ID.make(ref.modelID),
+              api: "resolveRef not supported in this seam",
+            }),
+          )),
     }),
   )
 
@@ -189,7 +191,15 @@ export const locationLayer = Layer.effect(
       }),
       resolveRef: Effect.fn("SessionRunnerModel.resolveRef")(function* (ref) {
         yield* boot.wait()
-        const selected = yield* catalog.model.get(ProviderV2.ID.make(ref.providerID), ModelV2.ID.make(ref.modelID))
+        const providerID = ProviderV2.ID.make(ref.providerID)
+        const modelID = ModelV2.ID.make(ref.modelID)
+        // Only resolve refs that point at an enabled model on an available provider.
+        // catalog.model.get ignores disabled/unavailable state, which would route to a
+        // model that cannot serve requests instead of falling back to the main model.
+        const selected = (yield* catalog.model.available()).find(
+          (model) => model.providerID === providerID && model.id === modelID,
+        )
+        if (!selected) return yield* new Catalog.ModelNotFoundError({ providerID, modelID })
         return yield* resolveSelected(selected, ref.variant)
       }),
     })
